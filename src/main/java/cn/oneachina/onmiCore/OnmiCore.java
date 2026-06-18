@@ -108,4 +108,8 @@ public final class OnmiCore extends JavaPlugin {
     public PurgeService getPurgeService() {
         return purgeService;
     }
+
+    public WebServerManager getWebServerManager() {
+        return webServerManager;
+    }
 }

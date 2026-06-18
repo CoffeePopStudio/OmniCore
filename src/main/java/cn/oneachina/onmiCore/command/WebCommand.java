@@ -8,14 +8,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class WebCommand implements SubCommand {
 
     private final OnmiCore plugin;
-    private final Map<UUID, String> bindTokens = new ConcurrentHashMap<>();
 
     public WebCommand() {
         this.plugin = JavaPlugin.getPlugin(OnmiCore.class);
@@ -39,11 +36,23 @@ public class WebCommand implements SubCommand {
                     return;
                 }
 
-                String bindToken = UUID.randomUUID().toString();
-                bindTokens.put(playerUuid, bindToken);
+                if (plugin.getWebServerManager() == null) {
+                    player.sendMessage(plugin.getMessageManager().get("prefix")
+                            .append(net.kyori.adventure.text.Component.text("<red>Web panel is not enabled</red>")));
+                    return;
+                }
+
+                String bindToken = plugin.getWebServerManager().createBindToken(playerUuid.toString());
+                if (bindToken == null) {
+                    player.sendMessage(plugin.getMessageManager().get("prefix")
+                            .append(net.kyori.adventure.text.Component.text("<red>Failed to create bind token</red>")));
+                    return;
+                }
 
                 int port = plugin.getConfigManager().getWebPanelPort();
-                String url = "http://localhost:" + port + "/bind?token=" + bindToken + "&uuid=" + playerUuid;
+                String ip = plugin.getServer().getIp();
+                if (ip.isEmpty()) ip = "localhost";
+                String url = "http://" + ip + ":" + port + "/api/auth/auto-login?bind_token=" + bindToken;
 
                 player.sendMessage(plugin.getMessageManager().get("web-link", url));
                 player.sendMessage(plugin.getMessageManager().get("web-link-expires", 30));
@@ -67,9 +76,5 @@ public class WebCommand implements SubCommand {
         }
 
         return false;
-    }
-
-    public String consumeBindToken(UUID playerUuid) {
-        return bindTokens.remove(playerUuid);
     }
 }
