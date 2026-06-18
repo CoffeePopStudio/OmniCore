@@ -1,0 +1,60 @@
+# OnmiCore English Messages
+
+prefix: "<gold>[OnmiCore]</gold> "
+
+# General
+command-no-permission: "<red>You don't have permission to use this command</red>"
+player-only: "<red>This command can only be used by players</red>"
+invalid-arguments: "<red>Invalid arguments. Usage: <gray>{0}</gray></red>"
+unknown-command: "<red>Unknown command. Type /oc help for help</red>"
+
+# Query
+query-header: "<gold>=== Query Results ({0} records) ===</gold>"
+query-entry: "<gray>#{0}</gray> <white>[{1}]</white> <aqua>{2}</aqua> <dark_aqua>{3}</dark_aqua> <gray>{4}</gray> <gold>@{5}</gold>"
+query-action-place: "<green>placed</green>"
+query-action-break: "<red>broke</red>"
+query-action-container: "<yellow>modified container</yellow>"
+query-action-inventory: "<light_purple>inventory change</light_purple>"
+query-no-results: "<gray>No matching records found</gray>"
+query-page: "<gray>--- Page {0}/{1} ---</gray>"
+
+# Inspect Mode
+inspect-enabled: "<green>Inspect mode enabled. Click a block to view history</green>"
+inspect-disabled: "<red>Inspect mode disabled</red>"
+
+# Rollback
+rollback-preview: "<gold>=== Rollback Preview ===</gold>"
+rollback-time-range: "<gray>Time range: {0} ~ {1}</gray>"
+rollback-affected-locations: "<gray>Affected locations: {0}</gray>"
+rollback-players: "<gray>Players involved: {0}</gray>"
+rollback-stats: "<dark_aqua>Placed: {0}</dark_aqua> <red>Broke: {1}</red> <yellow>Container: {2}</yellow>"
+rollback-confirm: "<green>Type <click:run_command:/oc rollback confirm><white>/oc rollback confirm</white></click> to execute</green>"
+rollback-cancel: "<red>Type <click:run_command:/oc rollback cancel><white>/oc rollback cancel</white></click> to cancel</red>"
+rollback-started: "<green>Rollback started...</green>"
+rollback-progress: "<gold>Rollback progress: {0}% ({1}/{2})</gold>"
+rollback-complete: "<green>Rollback complete! {0} changes processed</green>"
+rollback-cancelled: "<red>Rollback cancelled</red>"
+rollback-no-preview: "<red>No pending rollback to confirm</red>"
+rollback-already-running: "<red>A rollback task is already running</red>"
+
+# Restore
+restore-success: "<green>Rollback #{0} has been undone</green>"
+restore-not-found: "<red>Rollback #{0} not found</red>"
+
+# Web Panel
+web-link: "<green>Web Panel link: <click:open_url:{0}><aqua>{0}</aqua></click></green>"
+web-link-expires: "<gray>This link expires in {0} minutes</gray>"
+web-already-bound: "<yellow>Your account is already bound to the web panel</yellow>"
+
+# Data Purge
+purge-start: "<yellow>Purging data older than {0} days...</yellow>"
+purge-complete: "<green>Purge complete! {0} records deleted</green>"
+purge-no-data: "<gray>No data to purge</gray>"
+
+# Admin
+plugin-status: "<gold>=== OnmiCore Status ===</gold>"
+plugin-version: "<gray>Version: {0}</gray>"
+database-status: "<gray>Database: {0} ({1})</gray>"
+record-count: "<gray>Total records: {0}</gray>"
+web-status: "<gray>Web Panel: {0} - :{1}</gray>"
+config-reloaded: "<green>Configuration reloaded</green>"

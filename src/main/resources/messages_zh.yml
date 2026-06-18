@@ -1,0 +1,60 @@
+# OnmiCore 中文消息
+
+prefix: "<gold>[OnmiCore]</gold> "
+
+# 通用
+command-no-permission: "<red>你没有权限使用此命令</red>"
+player-only: "<red>此命令仅限玩家使用</red>"
+invalid-arguments: "<red>参数错误。用法: <gray>{0}</gray></red>"
+unknown-command: "<red>未知命令。输入 /oc help 查看帮助</red>"
+
+# 查询
+query-header: "<gold>=== 查询结果 ({0} 条) ===</gold>"
+query-entry: "<gray>#{0}</gray> <white>[{1}]</white> <aqua>{2}</aqua> <dark_aqua>{3}</dark_aqua> <gray>{4}</gray> <gold>@{5}</gold>"
+query-action-place: "<green>放置了</green>"
+query-action-break: "<red>破坏了</red>"
+query-action-container: "<yellow>操作了容器</yellow>"
+query-action-inventory: "<light_purple>背包变更</light_purple>"
+query-no-results: "<gray>未找到符合条件的记录</gray>"
+query-page: "<gray>--- 第 {0}/{1} 页 ---</gray>"
+
+# 检查模式
+inspect-enabled: "<green>检查模式已开启。点击方块查看历史记录</green>"
+inspect-disabled: "<red>检查模式已关闭</red>"
+
+# 回滚
+rollback-preview: "<gold>=== 回滚预览 ===</gold>"
+rollback-time-range: "<gray>时间段: {0} ~ {1}</gray>"
+rollback-affected-locations: "<gray>受影响坐标: {0} 个</gray>"
+rollback-players: "<gray>涉及玩家: {0}</gray>"
+rollback-stats: "<dark_aqua>放置: {0}</dark_aqua> <red>破坏: {1}</red> <yellow>容器: {2}</yellow>"
+rollback-confirm: "<green>输入 <click:run_command:/oc rollback confirm><white>/oc rollback confirm</white></click> 确认执行</green>"
+rollback-cancel: "<red>输入 <click:run_command:/oc rollback cancel><white>/oc rollback cancel</white></click> 取消</red>"
+rollback-started: "<green>回滚开始...</green>"
+rollback-progress: "<gold>回滚进度: {0}% ({1}/{2})</gold>"
+rollback-complete: "<green>回滚完成！共处理 {0} 个变更</green>"
+rollback-cancelled: "<red>回滚已取消</red>"
+rollback-no-preview: "<red>没有待确认的回滚操作</red>"
+rollback-already-running: "<red>已有回滚任务正在执行</red>"
+
+# 撤销回滚
+restore-success: "<green>已撤销回滚 #{0}</green>"
+restore-not-found: "<red>未找到回滚 #{0}</red>"
+
+# Web 面板
+web-link: "<green>Web 面板链接: <click:open_url:{0}><aqua>{0}</aqua></click></green>"
+web-link-expires: "<gray>此链接将在 {0} 分钟后过期</gray>"
+web-already-bound: "<yellow>你的账户已绑定 Web 面板</yellow>"
+
+# 数据清理
+purge-start: "<yellow>开始清理 {0} 天前的数据...</yellow>"
+purge-complete: "<green>清理完成！共删除 {0} 条记录</green>"
+purge-no-data: "<gray>没有需要清理的数据</gray>"
+
+# 管理
+plugin-status: "<gold>=== OnmiCore 状态 ===</gold>"
+plugin-version: "<gray>版本: {0}</gray>"
+database-status: "<gray>数据库: {0} ({1})</gray>"
+record-count: "<gray>总记录数: {0}</gray>"
+web-status: "<gray>Web 面板: {0} - :{1}</gray>"
+config-reloaded: "<green>配置文件已重载</green>"
