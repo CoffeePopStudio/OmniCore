@@ -12,6 +12,8 @@ import cn.oneachina.onmiCore.service.PurgeService;
 import cn.oneachina.onmiCore.web.WebServerManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Objects;
+
 public final class OnmiCore extends JavaPlugin {
 
     private ConfigManager configManager;
@@ -76,8 +78,8 @@ public final class OnmiCore extends JavaPlugin {
 
     private void registerCommands() {
         CommandManager commandManager = new CommandManager();
-        getCommand("oc").setExecutor(commandManager);
-        getCommand("oc").setTabCompleter(commandManager);
+        Objects.requireNonNull(getCommand("oc")).setExecutor(commandManager);
+        Objects.requireNonNull(getCommand("oc")).setTabCompleter(commandManager);
     }
 
     private void startWebServer() {
