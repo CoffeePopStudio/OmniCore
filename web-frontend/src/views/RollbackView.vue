@@ -1,61 +1,173 @@
 <template>
-  <div>
-    <n-h2>回滚</n-h2>
-    <n-card style="margin-bottom: 16px;">
-      <n-space vertical>
-        <n-grid :cols="4" x-gap="12" y-gap="12">
+  <div class="rollback-page">
+    <n-card :bordered="false" class="rollback-card">
+      <template #header>
+        <div class="rollback-header">
+          <span>回滚操作</span>
+        </div>
+      </template>
+
+      <n-form :model="formData" label-placement="left" label-width="100">
+        <n-grid :cols="3" :x-gap="16" :y-gap="16">
           <n-grid-item>
-            <n-form-item label="玩家名">
-              <n-input v-model:value="filters.player" placeholder="输入玩家名" />
+            <n-form-item label="时间量">
+              <n-input-number
+                v-model:value="formData.timeAmount"
+                :min="1"
+                :max="999999"
+                placeholder="输入时间量"
+                clearable
+              />
             </n-form-item>
           </n-grid-item>
           <n-grid-item>
-            <n-form-item label="时间">
-              <n-select v-model:value="filters.time" :options="timeOptions" />
+            <n-form-item label="时间单位">
+              <n-select
+                v-model:value="formData.timeUnit"
+                :options="timeUnitOptions"
+                placeholder="选择时间单位"
+              />
+            </n-form-item>
+          </n-grid-item>
+          <n-grid-item>
+            <n-form-item label="玩家">
+              <n-input
+                v-model:value="formData.player"
+                placeholder="输入玩家名（可选）"
+                clearable
+              />
             </n-form-item>
           </n-grid-item>
           <n-grid-item>
             <n-form-item label="世界">
-              <n-input v-model:value="filters.world" placeholder="世界名称" />
-            </n-form-item>
-          </n-grid-item>
-          <n-grid-item>
-            <n-form-item label="半径 / 坐标">
-              <n-input v-model:value="filters.radius" placeholder="半径" style="margin-bottom: 4px;" />
-              <n-input v-model:value="filters.coords" placeholder="x,y,z" />
+              <n-input
+                v-model:value="formData.world"
+                placeholder="输入世界名（可选）"
+                clearable
+              />
             </n-form-item>
           </n-grid-item>
           <n-grid-item>
             <n-form-item label="方块类型">
-              <n-input v-model:value="filters.blockType" placeholder="minecraft:stone" />
+              <n-input
+                v-model:value="formData.blockType"
+                placeholder="输入方块类型（可选）"
+                clearable
+              />
+            </n-form-item>
+          </n-grid-item>
+          <n-grid-item>
+            <n-form-item label="半径">
+              <n-input-number
+                v-model:value="formData.radius"
+                :min="0"
+                :max="10000"
+                placeholder="半径（可选）"
+                clearable
+              />
+            </n-form-item>
+          </n-grid-item>
+          <n-grid-item>
+            <n-form-item label="坐标 X">
+              <n-input-number
+                v-model:value="formData.x"
+                :min="-30000000"
+                :max="30000000"
+                placeholder="X（可选）"
+                clearable
+              />
+            </n-form-item>
+          </n-grid-item>
+          <n-grid-item>
+            <n-form-item label="坐标 Y">
+              <n-input-number
+                v-model:value="formData.y"
+                :min="-64"
+                :max="320"
+                placeholder="Y（可选）"
+                clearable
+              />
+            </n-form-item>
+          </n-grid-item>
+          <n-grid-item>
+            <n-form-item label="坐标 Z">
+              <n-input-number
+                v-model:value="formData.z"
+                :min="-30000000"
+                :max="30000000"
+                placeholder="Z（可选）"
+                clearable
+              />
             </n-form-item>
           </n-grid-item>
         </n-grid>
-        <n-space>
-          <n-button type="primary" :loading="previewLoading" @click="handlePreview">预览回滚</n-button>
+
+        <n-space class="action-bar" justify="center" :size="16">
+          <n-button
+            type="primary"
+            :loading="previewLoading"
+            @click="handlePreview"
+            :disabled="executeLoading"
+          >
+            预览
+          </n-button>
+          <n-button
+            type="warning"
+            :loading="executeLoading"
+            @click="handleExecute"
+            :disabled="previewLoading"
+          >
+            执行回滚
+          </n-button>
         </n-space>
-      </n-space>
+      </n-form>
     </n-card>
 
-    <n-card v-if="previewData.length > 0" title="预览结果" style="margin-bottom: 16px;">
-      <n-data-table :columns="previewColumns" :data="previewData" :bordered="true" />
-      <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
-        <n-button type="warning" @click="showConfirmModal = true">确认执行</n-button>
-      </div>
+    <n-card v-if="previewResult" :bordered="false" class="preview-card">
+      <template #header>
+        <div class="preview-header">
+          <span>预览结果</span>
+        </div>
+      </template>
+
+      <n-descriptions label-placement="left" :column="2" bordered size="small">
+        <n-descriptions-item label="受影响位置数">
+          {{ previewResult.affectedLocations }}
+        </n-descriptions-item>
+        <n-descriptions-item label="摘要">
+          {{ previewResult.summary }}
+        </n-descriptions-item>
+      </n-descriptions>
+
+      <n-data-table
+        v-if="previewResult.records.length > 0"
+        :columns="previewColumns"
+        :data="previewResult.records"
+        :bordered="false"
+        :single-line="false"
+        size="small"
+        class="preview-table"
+      />
     </n-card>
 
-    <n-modal v-model:show="showConfirmModal" preset="dialog" title="确认回滚" positive-text="确认执行" negative-text="取消" @positive-click="handleExecute" @negative-click="showConfirmModal = false">
-      <p>确认执行回滚操作？此操作不可逆。</p>
-    </n-modal>
+    <n-card v-if="executeResult" :bordered="false" class="execute-card">
+      <template #header>
+        <div class="execute-header">
+          <span>执行结果</span>
+        </div>
+      </template>
 
-    <n-card v-if="executing" title="执行进度" style="margin-bottom: 16px;">
-      <n-progress :percentage="progress" :indicator-placement="'inside'" processing />
-    </n-card>
-
-    <n-card v-if="resultSummary" title="执行结果" style="margin-bottom: 16px;">
-      <n-result status="success" title="回滚完成">
-        <template #default>
-          <p>{{ resultSummary }}</p>
+      <n-result
+        :type="executeResult.success ? 'success' : 'error'"
+        :title="executeResult.success ? '回滚成功' : '回滚失败'"
+        :description="executeResult.message"
+      >
+        <template #footer>
+          <n-descriptions v-if="executeResult.affectedLocations" label-placement="left" :column="1" bordered size="small">
+            <n-descriptions-item label="受影响位置数">
+              {{ executeResult.affectedLocations }}
+            </n-descriptions-item>
+          </n-descriptions>
         </template>
       </n-result>
     </n-card>
@@ -63,114 +175,176 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, reactive } from 'vue'
+import { format } from 'date-fns'
+import { useMessage, useDialog } from 'naive-ui'
 import type { DataTableColumn } from 'naive-ui'
-import { rollbackPreview, rollbackExecute, rollbackProgress } from '../api/client'
+import { api } from '../api/client'
+import type { RollbackPreviewResponse, RollbackExecuteResponse } from '../api/client'
 
-const route = useRoute()
-
-const timeOptions = [
-  { label: '30 分钟', value: '30m' },
-  { label: '1 小时', value: '1h' },
-  { label: '6 小时', value: '6h' },
-  { label: '1 天', value: '1d' },
-]
-
-const filters = reactive({
-  player: (route.query.player as string) || '',
-  time: (route.query.time as string) || '30m',
-  world: '',
-  radius: '',
-  coords: '',
-  blockType: '',
-})
+const message = useMessage()
+const dialog = useDialog()
 
 const previewLoading = ref(false)
-const previewData = ref<any[]>([])
-const showConfirmModal = ref(false)
-const executing = ref(false)
-const progress = ref(0)
-const resultSummary = ref('')
+const executeLoading = ref(false)
+const previewResult = ref<RollbackPreviewResponse | null>(null)
+const executeResult = ref<RollbackExecuteResponse | null>(null)
 
-let progressTimer: ReturnType<typeof setInterval> | null = null
-
-const previewColumns: DataTableColumn[] = [
-  { title: '坐标', key: 'coords', width: 160 },
-  { title: '操作摘要', key: 'summary', width: 200 },
-  { title: '当前方块', key: 'currentBlock', width: 160 },
-  { title: '回滚后方块', key: 'rollbackBlock', width: 160 },
+const timeUnitOptions = [
+  { label: '秒', value: 'seconds' },
+  { label: '分钟', value: 'minutes' },
+  { label: '小时', value: 'hours' },
+  { label: '天', value: 'days' },
 ]
 
+const formData = reactive({
+  timeAmount: 10,
+  timeUnit: 'minutes',
+  player: '',
+  world: '',
+  blockType: '',
+  radius: null as number | null,
+  x: null as number | null,
+  y: null as number | null,
+  z: null as number | null,
+})
+
+const previewColumns: DataTableColumn[] = [
+  { title: '位置', key: 'location', width: 200, ellipsis: { tooltip: true } },
+  { title: '旧方块', key: 'oldBlock', width: 140 },
+  { title: '新方块', key: 'newBlock', width: 140 },
+  { title: '玩家', key: 'player', width: 120 },
+  {
+    title: '时间',
+    key: 'time',
+    width: 180,
+    render(row: any) {
+      try {
+        return format(new Date(row.time), 'yyyy-MM-dd HH:mm:ss')
+      } catch {
+        return row.time || '-'
+      }
+    },
+  },
+]
+
+function getExecuteParams(confirm: boolean) {
+  return {
+    timeAmount: formData.timeAmount,
+    timeUnit: formData.timeUnit,
+    player: formData.player || undefined,
+    world: formData.world || undefined,
+    blockType: formData.blockType || undefined,
+    radius: formData.radius ?? undefined,
+    x: formData.x ?? undefined,
+    y: formData.y ?? undefined,
+    z: formData.z ?? undefined,
+    confirm,
+  }
+}
+
 async function handlePreview() {
+  if (!formData.timeAmount) {
+    message.warning('请填写时间量')
+    return
+  }
+
   previewLoading.value = true
+  executeResult.value = null
   try {
-    const res = await rollbackPreview({
-      player: filters.player || undefined,
-      time: filters.time,
-      world: filters.world || undefined,
-      radius: filters.radius ? Number(filters.radius) : undefined,
-      coords: filters.coords || undefined,
-      blockType: filters.blockType || undefined,
-    })
-    previewData.value = res.data.records || []
-  } catch (err) {
-    console.error('预览失败', err)
+    const params = {
+      timeAmount: formData.timeAmount,
+      timeUnit: formData.timeUnit,
+      player: formData.player || undefined,
+      world: formData.world || undefined,
+      blockType: formData.blockType || undefined,
+      radius: formData.radius ?? undefined,
+      x: formData.x ?? undefined,
+      y: formData.y ?? undefined,
+      z: formData.z ?? undefined,
+    }
+    previewResult.value = await api.rollbackPreview(params)
+  } catch (err: any) {
+    message.error(err.message || '预览失败')
   } finally {
     previewLoading.value = false
   }
 }
 
-async function handleExecute() {
-  showConfirmModal.value = false
-  executing.value = true
-  progress.value = 0
-  try {
-    const res = await rollbackExecute({
-      player: filters.player || undefined,
-      time: filters.time,
-      world: filters.world || undefined,
-      radius: filters.radius ? Number(filters.radius) : undefined,
-      coords: filters.coords || undefined,
-      blockType: filters.blockType || undefined,
-    })
-    const ticket = res.data.ticket
-    if (ticket) {
-      progressTimer = setInterval(async () => {
-        try {
-          const pRes = await rollbackProgress(ticket)
-          progress.value = pRes.data.progress || 0
-          if (progress.value >= 100) {
-            if (progressTimer) {
-              clearInterval(progressTimer)
-              progressTimer = null
-            }
-            executing.value = false
-            resultSummary.value = pRes.data.summary || '回滚完成'
-          }
-        } catch {
-          if (progressTimer) {
-            clearInterval(progressTimer)
-            progressTimer = null
-          }
-          executing.value = false
-        }
-      }, 1000)
-    } else {
-      progress.value = 100
-      executing.value = false
-      resultSummary.value = '回滚执行完成'
-    }
-  } catch (err) {
-    console.error('执行失败', err)
-    executing.value = false
+function handleExecute() {
+  if (!formData.timeAmount) {
+    message.warning('请填写时间量')
+    return
   }
+
+  dialog.warning({
+    title: '确认回滚',
+    content: '确定要执行回滚操作吗？此操作不可撤销。',
+    positiveText: '确认执行',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      executeLoading.value = true
+      previewResult.value = null
+      try {
+        executeResult.value = await api.rollbackExecute(getExecuteParams(true))
+        if (executeResult.value.success) {
+          message.success('回滚执行成功')
+        } else {
+          message.error(executeResult.value.message || '回滚执行失败')
+        }
+      } catch (err: any) {
+        message.error(err.message || '回滚执行失败')
+      } finally {
+        executeLoading.value = false
+      }
+    },
+  })
+}
+</script>
+
+<style scoped>
+.rollback-page {
+  max-width: 1000px;
+  margin: 0 auto;
 }
 
-onUnmounted(() => {
-  if (progressTimer) {
-    clearInterval(progressTimer)
-    progressTimer = null
-  }
-})
-</script>
+.rollback-card {
+  background-color: #1a1a22;
+  margin-bottom: 16px;
+}
+
+.rollback-header {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.action-bar {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.preview-card {
+  background-color: #1a1a22;
+  margin-bottom: 16px;
+}
+
+.preview-header {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.preview-table {
+  margin-top: 16px;
+}
+
+.execute-card {
+  background-color: #1a1a22;
+  margin-bottom: 16px;
+}
+
+.execute-header {
+  font-size: 15px;
+  font-weight: 600;
+}
+</style>

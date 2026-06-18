@@ -1,19 +1,25 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import AutoImport from 'unplugin-auto-import/vite'
 
 export default defineConfig({
-  base: '/',
-  plugins: [vue()],
+  base: './',
+  plugins: [
+    vue(),
+    AutoImport({
+      imports: [
+        'vue',
+        'vue-router',
+        'pinia'
+      ]
+    })
+  ],
   server: {
-    port: 5173,
     proxy: {
       '/api': {
         target: 'http://localhost:9812',
-        changeOrigin: true,
-      },
-    },
-  },
-  build: {
-    outDir: 'dist',
-  },
+        changeOrigin: true
+      }
+    }
+  }
 })
