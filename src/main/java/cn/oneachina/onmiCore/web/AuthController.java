@@ -1,220 +1,213 @@
 package cn.oneachina.onmiCore.web;
 
 import cn.oneachina.onmiCore.database.DatabaseManager;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import cn.oneachina.onmiCore.util.PermissionUtil;
 import io.javalin.http.Context;
+import org.bukkit.Bukkit;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class AuthController {
-    private final DatabaseManager databaseManager;
+public final class AuthController {
+    private final DatabaseManager db;
     private final AuthService authService;
-    private final Gson gson;
+    private final Map<String, String> bindTokens = new ConcurrentHashMap<>();
 
-    public AuthController(DatabaseManager databaseManager) {
-        this.databaseManager = databaseManager;
-        this.authService = new AuthService();
-        this.gson = new Gson();
-    }
-
-    public void bind(Context ctx) {
-        String uuidStr = ctx.queryParam("uuid");
-        if (uuidStr == null || uuidStr.isEmpty()) {
-            try {
-                JsonObject body = gson.fromJson(ctx.body(), JsonObject.class);
-                if (body != null && body.has("uuid")) {
-                    uuidStr = body.get("uuid").getAsString();
-                }
-            } catch (Exception ignored) {
-            }
-        }
-
-        if (uuidStr == null || uuidStr.isEmpty()) {
-            ctx.status(400).json(Map.of("success", false, "message", "uuid is required"));
-            return;
-        }
-
-        UUID playerUuid;
-        try {
-            playerUuid = UUID.fromString(uuidStr);
-        } catch (IllegalArgumentException e) {
-            ctx.status(400).json(Map.of("success", false, "message", "invalid uuid"));
-            return;
-        }
-
-        String sql = "SELECT player_uuid, player_name FROM web_users WHERE player_uuid = ?";
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, playerUuid.toString());
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    String playerName = rs.getString("player_name");
-                    String token = authService.generateToken(playerUuid, playerName);
-                    Map<String, Object> data = new HashMap<>();
-                    data.put("token", token);
-                    data.put("uuid", playerUuid.toString());
-                    data.put("playerName", playerName);
-                    ctx.json(Map.of("success", true, "data", data, "message", "ok"));
-                } else {
-                    ctx.status(404).json(Map.of("success", false, "message", "not_registered"));
-                }
-            }
-        } catch (Exception e) {
-            ctx.status(500).json(Map.of("success", false, "message", e.getMessage()));
-        }
+    public AuthController(DatabaseManager db, AuthService authService) {
+        this.db = db;
+        this.authService = authService;
     }
 
     public void register(Context ctx) {
-        JsonObject body;
         try {
-            body = gson.fromJson(ctx.body(), JsonObject.class);
-        } catch (Exception e) {
-            ctx.status(400).json(Map.of("success", false, "message", "invalid json"));
-            return;
-        }
-
-        if (body == null || !body.has("uuid") || !body.has("username") || !body.has("password") || !body.has("playerName")) {
-            ctx.status(400).json(Map.of("success", false, "message", "missing required fields: uuid, username, password, playerName"));
-            return;
-        }
-
-        String uuidStr = body.get("uuid").getAsString();
-        String username = body.get("username").getAsString();
-        String password = body.get("password").getAsString();
-        String playerName = body.get("playerName").getAsString();
-
-        UUID playerUuid;
-        try {
-            playerUuid = UUID.fromString(uuidStr);
-        } catch (IllegalArgumentException e) {
-            ctx.status(400).json(Map.of("success", false, "message", "invalid uuid"));
-            return;
-        }
-
-        String checkSql = "SELECT id FROM web_users WHERE player_uuid = ?";
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement ps = conn.prepareStatement(checkSql)) {
-            ps.setString(1, playerUuid.toString());
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    ctx.status(409).json(Map.of("success", false, "message", "already registered"));
-                    return;
+            String uuid = ctx.formParam("uuid");
+            String username = ctx.formParam("username");
+            String password = ctx.formParam("password");
+            if (uuid == null || username == null || password == null) {
+                ctx.status(400).json(Map.of("error", "Missing fields"));
+                return;
+            }
+            if (Bukkit.getPlayer(UUID.fromString(uuid)) == null && Bukkit.getOfflinePlayer(UUID.fromString(uuid)).getName() == null) {
+                ctx.status(400).json(Map.of("error", "Player not found"));
+                return;
+            }
+            try (Connection conn = db.getConnection();
+                 PreparedStatement check = conn.prepareStatement("SELECT id FROM web_users WHERE player_uuid = ?")) {
+                check.setString(1, uuid);
+                try (ResultSet rs = check.executeQuery()) {
+                    if (rs.next()) {
+                        ctx.status(409).json(Map.of("error", "Already registered"));
+                        return;
+                    }
                 }
             }
+            String passwordHash = authService.hashPassword(password);
+            String rawToken = authService.generateToken(uuid, username);
+            String encryptedToken = authService.encryptAES(rawToken);
+
+            try (Connection conn = db.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO web_users (player_uuid, player_name, username, password_hash, token_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")) {
+                ps.setString(1, uuid);
+                ps.setString(2, Bukkit.getOfflinePlayer(UUID.fromString(uuid)).getName());
+                ps.setString(3, username);
+                ps.setString(4, passwordHash);
+                ps.setString(5, encryptedToken);
+                ps.executeUpdate();
+            }
+            ctx.json(Map.of("token", rawToken, "uuid", uuid, "username", username));
         } catch (Exception e) {
-            ctx.status(500).json(Map.of("success", false, "message", e.getMessage()));
-            return;
+            ctx.status(500).json(Map.of("error", e.getMessage()));
         }
-
-        String passwordHash = authService.hashPassword(password);
-        String randomToken = UUID.randomUUID().toString();
-        String encryptedToken = authService.encryptToken(randomToken);
-        String now = Instant.now().toString();
-
-        String insertSql = "INSERT INTO web_users (player_uuid, player_name, username, password_hash, token_encrypted, created_at) VALUES (?, ?, ?, ?, ?, ?)";
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement ps = conn.prepareStatement(insertSql)) {
-            ps.setString(1, playerUuid.toString());
-            ps.setString(2, playerName);
-            ps.setString(3, username);
-            ps.setString(4, passwordHash);
-            ps.setString(5, encryptedToken);
-            ps.setString(6, now);
-            ps.executeUpdate();
-        } catch (Exception e) {
-            ctx.status(500).json(Map.of("success", false, "message", e.getMessage()));
-            return;
-        }
-
-        String token = authService.generateToken(playerUuid, playerName);
-        Map<String, Object> data = new HashMap<>();
-        data.put("token", token);
-        data.put("uuid", playerUuid.toString());
-        data.put("playerName", playerName);
-        ctx.status(201).json(Map.of("success", true, "data", data, "message", "registered"));
     }
 
     public void login(Context ctx) {
-        JsonObject body;
         try {
-            body = gson.fromJson(ctx.body(), JsonObject.class);
-        } catch (Exception e) {
-            ctx.status(400).json(Map.of("success", false, "message", "invalid json"));
-            return;
-        }
-
-        if (body == null || !body.has("username") || !body.has("password")) {
-            ctx.status(400).json(Map.of("success", false, "message", "missing required fields: username, password"));
-            return;
-        }
-
-        String username = body.get("username").getAsString();
-        String password = body.get("password").getAsString();
-
-        String sql = "SELECT player_uuid, player_name, password_hash FROM web_users WHERE username = ?";
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, username);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    String passwordHash = rs.getString("password_hash");
-                    if (authService.verifyPassword(password, passwordHash)) {
-                        UUID playerUuid = UUID.fromString(rs.getString("player_uuid"));
-                        String playerName = rs.getString("player_name");
-
-                        String updateSql = "UPDATE web_users SET last_login = ? WHERE username = ?";
-                        try (PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
-                            updatePs.setString(1, Instant.now().toString());
-                            updatePs.setString(2, username);
-                            updatePs.executeUpdate();
-                        }
-
-                        String token = authService.generateToken(playerUuid, playerName);
-                        Map<String, Object> data = new HashMap<>();
-                        data.put("token", token);
-                        data.put("uuid", playerUuid.toString());
-                        data.put("playerName", playerName);
-                        ctx.json(Map.of("success", true, "data", data, "message", "ok"));
-                    } else {
-                        ctx.status(401).json(Map.of("success", false, "message", "invalid password"));
+            String uuid = ctx.formParam("uuid");
+            String password = ctx.formParam("password");
+            if (uuid == null || password == null) {
+                ctx.status(400).json(Map.of("error", "Missing fields"));
+                return;
+            }
+            try (Connection conn = db.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(
+                    "SELECT username, password_hash, token_encrypted FROM web_users WHERE player_uuid = ?")) {
+                ps.setString(1, uuid);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        ctx.status(401).json(Map.of("error", "Not registered"));
+                        return;
                     }
-                } else {
-                    ctx.status(404).json(Map.of("success", false, "message", "user not found"));
+                    String hash = rs.getString("password_hash");
+                    if (!authService.verifyPassword(password, hash)) {
+                        ctx.status(401).json(Map.of("error", "Invalid password"));
+                        return;
+                    }
+                    String username = rs.getString("username");
+                    String newToken = authService.generateToken(uuid, username);
+                    String encryptedToken = authService.encryptAES(newToken);
+                    try (PreparedStatement update = conn.prepareStatement(
+                            "UPDATE web_users SET token_encrypted = ?, last_login = datetime('now') WHERE player_uuid = ?")) {
+                        update.setString(1, encryptedToken);
+                        update.setString(2, uuid);
+                        update.executeUpdate();
+                    }
+                    ctx.json(Map.of("token", newToken, "uuid", uuid, "username", username));
                 }
             }
         } catch (Exception e) {
-            ctx.status(500).json(Map.of("success", false, "message", e.getMessage()));
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
+
+    public void bind(Context ctx) {
+        String bindToken = ctx.formParam("bind_token");
+        String username = ctx.formParam("username");
+        String password = ctx.formParam("password");
+        if (bindToken == null || username == null || password == null) {
+            ctx.status(400).json(Map.of("error", "Missing fields"));
+            return;
+        }
+        String uuid = bindTokens.remove(bindToken);
+        if (uuid == null) {
+            ctx.status(400).json(Map.of("error", "Invalid or expired bind token"));
+            return;
+        }
+        try {
+            try (Connection conn = db.getConnection();
+                 PreparedStatement check = conn.prepareStatement("SELECT id FROM web_users WHERE player_uuid = ?")) {
+                check.setString(1, uuid);
+                try (ResultSet rs = check.executeQuery()) {
+                    if (rs.next()) {
+                        ctx.status(409).json(Map.of("error", "Already registered"));
+                        return;
+                    }
+                }
+            }
+            String passwordHash = authService.hashPassword(password);
+            String rawToken = authService.generateToken(uuid, username);
+            String encryptedToken = authService.encryptAES(rawToken);
+            try (Connection conn = db.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO web_users (player_uuid, player_name, username, password_hash, token_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")) {
+                ps.setString(1, uuid);
+                ps.setString(2, Bukkit.getOfflinePlayer(UUID.fromString(uuid)).getName());
+                ps.setString(3, username);
+                ps.setString(4, passwordHash);
+                ps.setString(5, encryptedToken);
+                ps.executeUpdate();
+            }
+            ctx.json(Map.of("token", rawToken, "uuid", uuid, "username", username));
+        } catch (Exception e) {
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
+
+    public void autoLogin(Context ctx) {
+        String bindToken = ctx.queryParam("bind_token");
+        if (bindToken == null) {
+            ctx.status(400).json(Map.of("error", "Missing bind_token"));
+            return;
+        }
+        String uuid = bindTokens.get(bindToken);
+        if (uuid == null) {
+            ctx.status(400).json(Map.of("error", "Invalid bind token"));
+            return;
+        }
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                "SELECT username, token_encrypted FROM web_users WHERE player_uuid = ?")) {
+            ps.setString(1, uuid);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    ctx.json(Map.of("status", "not_registered", "uuid", uuid, "bind_token", bindToken));
+                    return;
+                }
+                String encryptedToken = rs.getString("token_encrypted");
+                String token = authService.decryptAES(encryptedToken);
+                if (authService.isTokenExpired(token)) {
+                    token = authService.refreshToken(token);
+                    if (token == null) {
+                        ctx.status(401).json(Map.of("error", "Token expired, please login again"));
+                        return;
+                    }
+                    String newEncrypted = authService.encryptAES(token);
+                    try (PreparedStatement up = conn.prepareStatement(
+                            "UPDATE web_users SET token_encrypted = ? WHERE player_uuid = ?")) {
+                        up.setString(1, newEncrypted);
+                        up.setString(2, uuid);
+                        up.executeUpdate();
+                    }
+                }
+                ctx.json(Map.of("status", "ok", "token", token, "uuid", uuid));
+            }
+        } catch (Exception e) {
+            ctx.status(500).json(Map.of("error", e.getMessage()));
         }
     }
 
     public void refresh(Context ctx) {
-        String authHeader = ctx.header("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            ctx.status(401).json(Map.of("success", false, "message", "missing or invalid authorization header"));
+        String oldToken = ctx.formParam("token");
+        if (oldToken == null) {
+            ctx.status(400).json(Map.of("error", "Missing token"));
             return;
         }
-
-        String token = authHeader.substring(7);
-        try {
-            var claims = authService.validateToken(token);
-            UUID playerUuid = UUID.fromString(claims.get("uuid", String.class));
-            String playerName = claims.get("name", String.class);
-
-            String newToken = authService.generateToken(playerUuid, playerName);
-            Map<String, Object> data = new HashMap<>();
-            data.put("token", newToken);
-            data.put("uuid", playerUuid.toString());
-            data.put("playerName", playerName);
-            ctx.json(Map.of("success", true, "data", data, "message", "ok"));
-        } catch (Exception e) {
-            ctx.status(401).json(Map.of("success", false, "message", "invalid or expired token"));
+        String newToken = authService.refreshToken(oldToken);
+        if (newToken == null) {
+            ctx.status(401).json(Map.of("error", "Invalid or expired token"));
+            return;
         }
+        ctx.json(Map.of("token", newToken));
+    }
+
+    public String createBindToken(String uuid) {
+        String bindToken = authService.generateBindToken();
+        bindTokens.put(bindToken, uuid);
+        return bindToken;
     }
 }
