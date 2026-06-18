@@ -39,6 +39,16 @@ public final class QueryController {
         return true;
     }
 
+    private int parseIntParam(Context ctx, String key, int defaultValue) {
+        String val = ctx.queryParam(key);
+        if (val == null || val.isEmpty()) return defaultValue;
+        try {
+            return Integer.parseInt(val);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
     public void queryBlocks(Context ctx) {
         if (!authenticate(ctx)) return;
         try {
@@ -46,8 +56,8 @@ public final class QueryController {
             String player = ctx.queryParam("player");
             String action = ctx.queryParam("action");
             String blockType = ctx.queryParam("block_type");
-            int page = Integer.parseInt(ctx.queryParam("page", "1"));
-            int pageSize = Integer.parseInt(ctx.queryParam("page_size", "50"));
+            int page = parseIntParam(ctx, "page", 1);
+            int pageSize = parseIntParam(ctx, "page_size", 50);
             String timeFrom = ctx.queryParam("time_from");
             String timeTo = ctx.queryParam("time_to");
 
@@ -103,8 +113,8 @@ public final class QueryController {
             String player = ctx.queryParam("player");
             String action = ctx.queryParam("action");
             String itemType = ctx.queryParam("item_type");
-            int page = Integer.parseInt(ctx.queryParam("page", "1"));
-            int pageSize = Integer.parseInt(ctx.queryParam("page_size", "50"));
+            int page = parseIntParam(ctx, "page", 1);
+            int pageSize = parseIntParam(ctx, "page_size", 50);
 
             StringBuilder sql = new StringBuilder("SELECT * FROM container_records WHERE 1=1");
             List<Object> params = new ArrayList<>();
@@ -155,8 +165,8 @@ public final class QueryController {
             String player = ctx.queryParam("player");
             String action = ctx.queryParam("action");
             String itemType = ctx.queryParam("item_type");
-            int page = Integer.parseInt(ctx.queryParam("page", "1"));
-            int pageSize = Integer.parseInt(ctx.queryParam("page_size", "50"));
+            int page = parseIntParam(ctx, "page", 1);
+            int pageSize = parseIntParam(ctx, "page_size", 50);
 
             StringBuilder sql = new StringBuilder("SELECT * FROM inventory_records WHERE 1=1");
             List<Object> params = new ArrayList<>();

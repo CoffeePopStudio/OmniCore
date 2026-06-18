@@ -76,18 +76,6 @@ public final class WebServerManager {
             cfg.bundledPlugins.enableCors(cors -> cors.addRule(corsRule -> {
                 corsRule.anyHost();
             }));
-            if (!config.getAllowedIps().isEmpty()) {
-                cfg.accessManager((handler, ctx, permittedRoles) -> {
-                    String ip = ctx.ip();
-                    if (config.getAllowedIps().stream().anyMatch(ip::equals)) {
-                        handler.handle(ctx);
-                    } else {
-                        ctx.status(403).json(new Object() {
-                            public final String error = "IP not allowed";
-                        });
-                    }
-                });
-            }
         };
     }
 }
