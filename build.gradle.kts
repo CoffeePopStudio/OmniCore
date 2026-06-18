@@ -1,7 +1,7 @@
 plugins {
     id("java-library")
     id("xyz.jpenilla.run-paper") version "3.0.2"
-    id("com.gradleup.shadow") version "8.3.6"
+    id("com.gradleup.shadow") version "9.0.0-beta9"
 }
 
 repositories {
@@ -47,14 +47,18 @@ java {
 tasks {
     shadowJar {
         relocate("com.zaxxer.hikari", "cn.oneachina.onmicore.libs.hikari")
-        relocate("org.sqlite", "cn.oneachina.onmicore.libs.sqlite")
-        relocate("com.mysql", "cn.oneachina.onmicore.libs.mysql")
         relocate("io.javalin", "cn.oneachina.onmicore.libs.javalin")
         relocate("at.favre.lib", "cn.oneachina.onmicore.libs.bcrypt")
         relocate("io.jsonwebtoken", "cn.oneachina.onmicore.libs.jjwt")
         relocate("com.google.gson", "cn.oneachina.onmicore.libs.gson")
         archiveFileName.set("OnmiCore-${project.version}.jar")
-        minimize()
+        mergeServiceFiles()
+        exclude("META-INF/LICENSE*")
+        exclude("META-INF/NOTICE*")
+        minimize {
+            exclude(dependency("org.xerial:sqlite-jdbc:.*"))
+            exclude(dependency("com.mysql:mysql-connector-j:.*"))
+        }
     }
 
     runServer {
