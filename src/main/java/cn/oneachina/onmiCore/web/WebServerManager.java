@@ -4,6 +4,7 @@ import cn.oneachina.onmiCore.config.ConfigManager;
 import cn.oneachina.onmiCore.database.DatabaseManager;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
+import io.javalin.http.staticfiles.Location;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.function.Consumer;
@@ -73,6 +74,7 @@ public final class WebServerManager {
     private Consumer<JavalinConfig> configConsumer() {
         return cfg -> {
             cfg.showJavalinBanner = false;
+            cfg.staticFiles.add("web", Location.CLASSPATH);
             cfg.bundledPlugins.enableCors(cors -> cors.addRule(corsRule -> {
                 corsRule.anyHost();
             }));
