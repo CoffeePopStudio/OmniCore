@@ -22,3 +22,6 @@ run
 
 .grill
 docs/plans
+
+# Npm packages
+web-frontend/node_modules
