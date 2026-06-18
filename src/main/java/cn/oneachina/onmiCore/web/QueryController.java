@@ -1,214 +1,198 @@
 package cn.oneachina.onmiCore.web;
 
-import cn.oneachina.onmiCore.OnmiCore;
-import cn.oneachina.onmiCore.model.BlockRecord;
-import cn.oneachina.onmiCore.model.ContainerRecord;
-import cn.oneachina.onmiCore.model.InventoryRecord;
-import cn.oneachina.onmiCore.service.RecordService;
+import cn.oneachina.onmiCore.config.ConfigManager;
+import cn.oneachina.onmiCore.database.DatabaseManager;
 import cn.oneachina.onmiCore.util.PermissionUtil;
 import io.javalin.http.Context;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-public class QueryController {
-    private static final Pattern TIME_PATTERN = Pattern.compile("^(\\d+)([mhd])$");
-
-    private static final DateTimeFormatter MYSQL_TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.of("UTC"));
-
-    private final OnmiCore plugin;
+public final class QueryController {
+    private final DatabaseManager db;
     private final AuthService authService;
-    private final RecordService recordService;
+    private final ConfigManager config;
 
-    public QueryController() {
-        this.plugin = JavaPlugin.getPlugin(OnmiCore.class);
-        this.authService = new AuthService();
-        this.recordService = new RecordService();
+    public QueryController(DatabaseManager db, AuthService authService, ConfigManager config) {
+        this.db = db;
+        this.authService = authService;
+        this.config = config;
+    }
+
+    private boolean authenticate(Context ctx) {
+        String token = ctx.queryParam("token");
+        if (token == null) {
+            ctx.status(401).json(Map.of("error", "Missing token"));
+            return false;
+        }
+        String uuid = authService.getUuidFromToken(token);
+        if (uuid == null) {
+            ctx.status(401).json(Map.of("error", "Invalid token"));
+            return false;
+        }
+        ctx.attribute("uuid", uuid);
+        return true;
     }
 
     public void queryBlocks(Context ctx) {
-        UUID uuid = extractUuid(ctx);
-        if (uuid == null) {
-            ctx.status(401).json(Map.of("success", false, "message", "unauthorized"));
-            return;
+        if (!authenticate(ctx)) return;
+        try {
+            String world = ctx.queryParam("world");
+            String player = ctx.queryParam("player");
+            String action = ctx.queryParam("action");
+            String blockType = ctx.queryParam("block_type");
+            int page = Integer.parseInt(ctx.queryParam("page", "1"));
+            int pageSize = Integer.parseInt(ctx.queryParam("page_size", "50"));
+            String timeFrom = ctx.queryParam("time_from");
+            String timeTo = ctx.queryParam("time_to");
+
+            StringBuilder sql = new StringBuilder("SELECT * FROM block_records WHERE 1=1");
+            List<Object> params = new ArrayList<>();
+
+            if (world != null && !world.isEmpty()) { sql.append(" AND world = ?"); params.add(world); }
+            if (player != null && !player.isEmpty()) { sql.append(" AND (player_name LIKE ? OR player_uuid = ?)"); params.add("%" + player + "%"); params.add(player); }
+            if (action != null && !action.isEmpty()) { sql.append(" AND action = ?"); params.add(action); }
+            if (blockType != null && !blockType.isEmpty()) { sql.append(" AND (old_block_type = ? OR new_block_type = ?)"); params.add(blockType); params.add(blockType); }
+            if (timeFrom != null && !timeFrom.isEmpty()) { sql.append(" AND timestamp >= ?"); params.add(timeFrom); }
+            if (timeTo != null && !timeTo.isEmpty()) { sql.append(" AND timestamp <= ?"); params.add(timeTo); }
+
+            sql.append(" ORDER BY timestamp DESC LIMIT ? OFFSET ?");
+            int offset = (page - 1) * pageSize;
+            params.add(pageSize);
+            params.add(offset);
+
+            List<Map<String, Object>> records = new ArrayList<>();
+            try (Connection conn = db.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+                for (int i = 0; i < params.size(); i++) {
+                    ps.setObject(i + 1, params.get(i));
+                }
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> rec = new HashMap<>();
+                        rec.put("id", rs.getLong("id"));
+                        rec.put("world", rs.getString("world"));
+                        rec.put("x", rs.getInt("x"));
+                        rec.put("y", rs.getInt("y"));
+                        rec.put("z", rs.getInt("z"));
+                        rec.put("player_uuid", rs.getString("player_uuid"));
+                        rec.put("player_name", rs.getString("player_name"));
+                        rec.put("action", rs.getString("action"));
+                        rec.put("old_block_type", rs.getString("old_block_type"));
+                        rec.put("new_block_type", rs.getString("new_block_type"));
+                        rec.put("timestamp", rs.getString("timestamp"));
+                        records.add(rec);
+                    }
+                }
+            }
+            ctx.json(Map.of("records", records, "page", page, "page_size", pageSize));
+        } catch (Exception e) {
+            ctx.status(500).json(Map.of("error", e.getMessage()));
         }
-
-        Player player = Bukkit.getPlayer(uuid);
-        if (player == null || !PermissionUtil.hasView(player)) {
-            ctx.status(403).json(Map.of("success", false, "message", "forbidden"));
-            return;
-        }
-
-        String world = ctx.queryParam("world");
-        String playerParam = ctx.queryParam("player");
-        String action = ctx.queryParam("action");
-        String blockType = ctx.queryParam("type");
-        Duration time = parseTime(ctx.queryParam("time"));
-        int page = parseInt(ctx.queryParam("page"), 0);
-        int pageSize = parseInt(ctx.queryParam("pageSize"), 20);
-
-        List<BlockRecord> records = recordService.queryBlocks(world, 0, 0, 0, playerParam, action, blockType, time, page, pageSize);
-        int total = recordService.countBlocks(world, 0, 0, 0, playerParam, action, blockType, time);
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("total", total);
-        data.put("page", page);
-        data.put("pageSize", pageSize);
-        data.put("records", records);
-
-        ctx.json(Map.of("success", true, "data", data, "message", "ok"));
     }
 
     public void queryContainers(Context ctx) {
-        UUID uuid = extractUuid(ctx);
-        if (uuid == null) {
-            ctx.status(401).json(Map.of("success", false, "message", "unauthorized"));
-            return;
+        if (!authenticate(ctx)) return;
+        try {
+            String world = ctx.queryParam("world");
+            String player = ctx.queryParam("player");
+            String action = ctx.queryParam("action");
+            String itemType = ctx.queryParam("item_type");
+            int page = Integer.parseInt(ctx.queryParam("page", "1"));
+            int pageSize = Integer.parseInt(ctx.queryParam("page_size", "50"));
+
+            StringBuilder sql = new StringBuilder("SELECT * FROM container_records WHERE 1=1");
+            List<Object> params = new ArrayList<>();
+
+            if (world != null && !world.isEmpty()) { sql.append(" AND world = ?"); params.add(world); }
+            if (player != null && !player.isEmpty()) { sql.append(" AND (player_name LIKE ? OR player_uuid = ?)"); params.add("%" + player + "%"); params.add(player); }
+            if (action != null && !action.isEmpty()) { sql.append(" AND action = ?"); params.add(action); }
+            if (itemType != null && !itemType.isEmpty()) { sql.append(" AND item_type = ?"); params.add(itemType); }
+
+            sql.append(" ORDER BY timestamp DESC LIMIT ? OFFSET ?");
+            int offset = (page - 1) * pageSize;
+            params.add(pageSize);
+            params.add(offset);
+
+            List<Map<String, Object>> records = new ArrayList<>();
+            try (Connection conn = db.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+                for (int i = 0; i < params.size(); i++) {
+                    ps.setObject(i + 1, params.get(i));
+                }
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> rec = new HashMap<>();
+                        rec.put("id", rs.getLong("id"));
+                        rec.put("world", rs.getString("world"));
+                        rec.put("x", rs.getInt("x"));
+                        rec.put("y", rs.getInt("y"));
+                        rec.put("z", rs.getInt("z"));
+                        rec.put("player_uuid", rs.getString("player_uuid"));
+                        rec.put("player_name", rs.getString("player_name"));
+                        rec.put("action", rs.getString("action"));
+                        rec.put("item_type", rs.getString("item_type"));
+                        rec.put("item_amount", rs.getInt("item_amount"));
+                        rec.put("timestamp", rs.getString("timestamp"));
+                        records.add(rec);
+                    }
+                }
+            }
+            ctx.json(Map.of("records", records, "page", page, "page_size", pageSize));
+        } catch (Exception e) {
+            ctx.status(500).json(Map.of("error", e.getMessage()));
         }
-
-        Player player = Bukkit.getPlayer(uuid);
-        if (player == null || !PermissionUtil.hasView(player)) {
-            ctx.status(403).json(Map.of("success", false, "message", "forbidden"));
-            return;
-        }
-
-        String world = ctx.queryParam("world");
-        String playerParam = ctx.queryParam("player");
-        String action = ctx.queryParam("action");
-        String itemType = ctx.queryParam("item");
-        Duration time = parseTime(ctx.queryParam("time"));
-        int page = parseInt(ctx.queryParam("page"), 0);
-        int pageSize = parseInt(ctx.queryParam("pageSize"), 20);
-
-        List<ContainerRecord> records = recordService.queryContainers(world, 0, 0, 0, playerParam, action, itemType, time, page, pageSize);
-        int total = recordService.countContainers(world, 0, 0, 0, playerParam, action, itemType, time);
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("total", total);
-        data.put("page", page);
-        data.put("pageSize", pageSize);
-        data.put("records", records);
-
-        ctx.json(Map.of("success", true, "data", data, "message", "ok"));
     }
 
     public void queryInventory(Context ctx) {
-        UUID uuid = extractUuid(ctx);
-        if (uuid == null) {
-            ctx.status(401).json(Map.of("success", false, "message", "unauthorized"));
-            return;
-        }
+        if (!authenticate(ctx)) return;
+        try {
+            String player = ctx.queryParam("player");
+            String action = ctx.queryParam("action");
+            String itemType = ctx.queryParam("item_type");
+            int page = Integer.parseInt(ctx.queryParam("page", "1"));
+            int pageSize = Integer.parseInt(ctx.queryParam("page_size", "50"));
 
-        Player player = Bukkit.getPlayer(uuid);
-        if (player == null || !PermissionUtil.hasView(player)) {
-            ctx.status(403).json(Map.of("success", false, "message", "forbidden"));
-            return;
-        }
+            StringBuilder sql = new StringBuilder("SELECT * FROM inventory_records WHERE 1=1");
+            List<Object> params = new ArrayList<>();
 
-        String playerParam = ctx.queryParam("player");
-        String action = ctx.queryParam("action");
-        String itemType = ctx.queryParam("item");
-        Duration time = parseTime(ctx.queryParam("time"));
-        int page = parseInt(ctx.queryParam("page"), 0);
-        int pageSize = parseInt(ctx.queryParam("pageSize"), 20);
+            if (player != null && !player.isEmpty()) { sql.append(" AND (player_name LIKE ? OR player_uuid = ?)"); params.add("%" + player + "%"); params.add(player); }
+            if (action != null && !action.isEmpty()) { sql.append(" AND action = ?"); params.add(action); }
+            if (itemType != null && !itemType.isEmpty()) { sql.append(" AND item_type = ?"); params.add(itemType); }
 
-        List<InventoryRecord> records = recordService.queryInventory(playerParam, action, itemType, time, page, pageSize);
+            sql.append(" ORDER BY timestamp DESC LIMIT ? OFFSET ?");
+            int offset = (page - 1) * pageSize;
+            params.add(pageSize);
+            params.add(offset);
 
-        int total = 0;
-        StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM inventory_records WHERE 1=1");
-        List<Object> params = new ArrayList<>();
-        if (playerParam != null && !playerParam.isEmpty()) {
-            countSql.append(" AND player_name = ?");
-            params.add(playerParam);
-        }
-        if (action != null && !action.isEmpty()) {
-            countSql.append(" AND action = ?");
-            params.add(action);
-        }
-        if (itemType != null && !itemType.isEmpty()) {
-            countSql.append(" AND item_type = ?");
-            params.add(itemType);
-        }
-        if (time != null) {
-            countSql.append(" AND timestamp >= ?");
-            params.add(MYSQL_TS.format(Instant.now().minus(time)));
-        }
-
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement ps = conn.prepareStatement(countSql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                ps.setObject(i + 1, params.get(i));
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    total = rs.getInt(1);
+            List<Map<String, Object>> records = new ArrayList<>();
+            try (Connection conn = db.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+                for (int i = 0; i < params.size(); i++) {
+                    ps.setObject(i + 1, params.get(i));
+                }
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> rec = new HashMap<>();
+                        rec.put("id", rs.getLong("id"));
+                        rec.put("player_uuid", rs.getString("player_uuid"));
+                        rec.put("player_name", rs.getString("player_name"));
+                        rec.put("action", rs.getString("action"));
+                        rec.put("item_type", rs.getString("item_type"));
+                        rec.put("item_amount", rs.getInt("item_amount"));
+                        rec.put("timestamp", rs.getString("timestamp"));
+                        records.add(rec);
+                    }
                 }
             }
+            ctx.json(Map.of("records", records, "page", page, "page_size", pageSize));
         } catch (Exception e) {
-            plugin.getSLF4JLogger().error("Failed to count inventory records", e);
-        }
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("total", total);
-        data.put("page", page);
-        data.put("pageSize", pageSize);
-        data.put("records", records);
-
-        ctx.json(Map.of("success", true, "data", data, "message", "ok"));
-    }
-
-    private UUID extractUuid(Context ctx) {
-        String authHeader = ctx.header("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return null;
-        }
-        try {
-            return authService.getUuidFromToken(authHeader.substring(7));
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private Duration parseTime(String timeStr) {
-        if (timeStr == null || timeStr.isEmpty()) {
-            return null;
-        }
-        Matcher matcher = TIME_PATTERN.matcher(timeStr);
-        if (!matcher.matches()) {
-            return null;
-        }
-        long amount = Long.parseLong(matcher.group(1));
-        String unit = matcher.group(2);
-        return switch (unit) {
-            case "h" -> Duration.ofHours(amount);
-            case "d" -> Duration.ofDays(amount);
-            default -> Duration.ofMinutes(amount);
-        };
-    }
-
-    private int parseInt(String value, int defaultValue) {
-        if (value == null || value.isEmpty()) {
-            return defaultValue;
-        }
-        try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException e) {
-            return defaultValue;
+            ctx.status(500).json(Map.of("error", e.getMessage()));
         }
     }
 }
