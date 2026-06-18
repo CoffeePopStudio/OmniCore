@@ -1,80 +1,45 @@
 <template>
-  <div class="register-wrapper">
-    <n-card class="register-card" :bordered="false">
-      <div class="register-header">
-        <div class="register-logo">O</div>
-        <h2>创建账户</h2>
-        <p class="register-subtitle">注册 OnmiCore Web Panel 账户</p>
-      </div>
-      <n-form ref="formRef" :model="formData" :rules="rules" @submit.prevent="handleRegister">
-        <n-form-item v-if="!isBind" label="UUID" path="uuid">
-          <n-input
-            v-model:value="formData.uuid"
-            placeholder="请输入您的 UUID"
-            :disabled="loading"
-          />
-        </n-form-item>
-        <n-form-item label="用户名" path="username">
-          <n-input
-            v-model:value="formData.username"
-            placeholder="请输入用户名"
-            :disabled="loading"
-          />
-        </n-form-item>
-        <n-form-item label="密码" path="password">
-          <n-input
-            v-model:value="formData.password"
-            type="password"
-            placeholder="请输入密码"
-            show-password-on="click"
-            :disabled="loading"
-          />
-        </n-form-item>
-        <n-form-item label="确认密码" path="confirmPassword">
-          <n-input
-            v-model:value="formData.confirmPassword"
-            type="password"
-            placeholder="请再次输入密码"
-            show-password-on="click"
-            :disabled="loading"
-          />
-        </n-form-item>
-        <n-form-item>
-          <n-button
-            type="primary"
-            block
-            :loading="loading"
-            @click="handleRegister"
-          >
-            {{ isBind ? '绑定账户' : '注册' }}
-          </n-button>
-        </n-form-item>
-      </n-form>
-      <div class="register-footer">
-        <span>已有账户？</span>
-        <n-button text type="primary" @click="goLogin">立即登录</n-button>
-      </div>
-    </n-card>
-  </div>
+  <n-card title="Register Web Panel Account" style="max-width: 400px; margin: 80px auto">
+    <n-alert v-if="!hasBindToken" type="warning" style="margin-bottom: 16px">
+      To register, first run <code>/oc web</code> in-game and click the generated link.
+    </n-alert>
+    <n-form ref="formRef" :model="formData" :rules="rules" @submit.prevent="handleRegister">
+      <n-form-item label="UUID" path="uuid">
+        <n-input v-model:value="formData.uuid" placeholder="Minecraft UUID" :disabled="bindTokenLoaded" />
+      </n-form-item>
+      <n-form-item label="Username" path="username">
+        <n-input v-model:value="formData.username" placeholder="Choose a username" />
+      </n-form-item>
+      <n-form-item label="Password" path="password">
+        <n-input v-model:value="formData.password" type="password" show-password-on="click" placeholder="Choose a password" />
+      </n-form-item>
+      <n-form-item label="Confirm Password" path="confirmPassword">
+        <n-input v-model:value="formData.confirmPassword" type="password" show-password-on="click" placeholder="Confirm your password" />
+      </n-form-item>
+      <n-button type="primary" attr-type="submit" :loading="loading" block>
+        Register
+      </n-button>
+    </n-form>
+    <p style="margin-top: 16px; text-align: center">
+      Already have an account?
+      <router-link to="/login">Login</router-link>
+    </p>
+  </n-card>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { useMessage } from 'naive-ui'
-import type { FormRules, FormInst } from 'naive-ui'
-import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const route = useRoute()
+const auth = useAuthStore()
 const message = useMessage()
-const authStore = useAuthStore()
-
-const formRef = ref<FormInst | null>(null)
 const loading = ref(false)
-
-const isBind = computed(() => !!route.query.bind_token)
-const bindToken = computed(() => (route.query.bind_token as string) || '')
+const bindTokenLoaded = ref(false)
+const hasBindToken = ref(false)
 
 const formData = reactive({
   uuid: '',
@@ -83,106 +48,49 @@ const formData = reactive({
   confirmPassword: '',
 })
 
-const rules: FormRules = {
-  uuid: [
-    { required: true, message: '请输入 UUID', trigger: 'blur' },
-  ],
-  username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 32, message: '用户名长度为 3-32 个字符', trigger: 'blur' },
-  ],
+const rules = {
+  uuid: [{ required: true, message: 'UUID is required' }],
+  username: [{ required: true, message: 'Username is required' }],
   password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码长度至少 6 个字符', trigger: 'blur' },
+    { required: true, message: 'Password is required' },
+    { min: 6, message: 'Password must be at least 6 characters' },
   ],
   confirmPassword: [
-    { required: true, message: '请再次输入密码', trigger: 'blur' },
+    { required: true, message: 'Please confirm your password' },
     {
-      validator: (_rule: any, value: string) => {
-        return value === formData.password || '两次输入的密码不一致'
-      },
-      trigger: 'blur',
+      validator: (_: any, value: string) => value === formData.password,
+      message: 'Passwords do not match',
     },
   ],
 }
 
+onMounted(() => {
+  const bindToken = route.query.bind_token as string
+  const uuidParam = route.query.uuid as string
+  if (bindToken) {
+    hasBindToken.value = true
+  }
+  if (uuidParam) {
+    formData.uuid = uuidParam
+    bindTokenLoaded.value = true
+  }
+})
+
 async function handleRegister() {
   try {
-    await formRef.value?.validate()
-  } catch {
-    return
-  }
-
-  loading.value = true
-  try {
-    if (isBind.value) {
-      await authStore.bind(bindToken.value, formData.username, formData.password)
-      message.success('绑定成功')
+    loading.value = true
+    const bindToken = route.query.bind_token as string
+    if (bindToken) {
+      await auth.bind(bindToken, formData.username, formData.password)
     } else {
-      await authStore.register(formData.uuid, formData.username, formData.password)
-      message.success('注册成功')
+      await auth.register(formData.uuid, formData.username, formData.password)
     }
-    router.push('/')
-  } catch (err: any) {
-    message.error(err.message || '注册失败')
+    message.success('Registration successful')
+    router.push('/dashboard')
+  } catch (e: any) {
+    message.error(e.message || 'Registration failed')
   } finally {
     loading.value = false
   }
 }
-
-function goLogin() {
-  router.push('/login')
-}
 </script>
-
-<style scoped>
-.register-wrapper {
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #0f0f14 0%, #1a1a2e 50%, #0f0f14 100%);
-}
-
-.register-card {
-  width: 420px;
-  padding: 12px;
-}
-
-.register-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.register-logo {
-  width: 48px;
-  height: 48px;
-  background: linear-gradient(135deg, #7c3aed, #3b82f6);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 700;
-  font-size: 24px;
-  margin: 0 auto 16px;
-}
-
-.register-header h2 {
-  color: #e0e0e0;
-  font-size: 20px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.register-subtitle {
-  color: #888;
-  font-size: 14px;
-}
-
-.register-footer {
-  text-align: center;
-  color: #888;
-  font-size: 13px;
-}
-</style>

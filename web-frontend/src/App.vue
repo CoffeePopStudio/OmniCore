@@ -13,8 +13,15 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { darkTheme, zhCN, dateZhCN } from 'naive-ui'
 import { NConfigProvider, NMessageProvider, NNotificationProvider, NLoadingBarProvider, NDialogProvider } from 'naive-ui'
+import { useAuthStore } from '@/stores/auth'
+
+onMounted(async () => {
+  const auth = useAuthStore()
+  await auth.checkAutoLogin()
+})
 </script>
 
 <style>

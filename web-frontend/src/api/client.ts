@@ -5,6 +5,16 @@ function getTokenParam(): string {
   return token ? `token=${encodeURIComponent(token)}` : ''
 }
 
+function buildFormData(data: Record<string, any>): URLSearchParams {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined && value !== null && value !== '') {
+      params.append(key, String(value))
+    }
+  }
+  return params
+}
+
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = getTokenParam()
   const separator = url.includes('?') ? '&' : '?'
@@ -13,14 +23,13 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(fullUrl, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
       ...options.headers,
     },
   })
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
-    throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+    throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
   }
 
   return response.json()
@@ -35,6 +44,13 @@ export interface AuthResponse {
   token: string
   uuid: string
   username: string
+}
+
+export interface AutoLoginResponse {
+  status: string
+  token?: string
+  uuid?: string
+  bind_token?: string
 }
 
 export interface QueryParams {
@@ -53,47 +69,19 @@ export interface QueryParams {
 
 export interface QueryResponse {
   records: any[]
-  total: number
   page: number
-  pageSize: number
-}
-
-export interface RollbackPreviewParams {
-  timeAmount: number
-  timeUnit: string
-  player?: string
-  world?: string
-  blockType?: string
-  radius?: number
-  x?: number
-  y?: number
-  z?: number
-}
-
-export interface RollbackExecuteParams {
-  timeAmount: number
-  timeUnit: string
-  player?: string
-  world?: string
-  blockType?: string
-  radius?: number
-  x?: number
-  y?: number
-  z?: number
-  confirm: boolean
+  page_size: number
 }
 
 export interface RollbackPreviewResponse {
-  affectedLocations: number
-  summary: string
-  records: any[]
+  preview: Record<string, string>
+  count: number
 }
 
 export interface RollbackExecuteResponse {
-  success: boolean
-  taskId?: string
-  message: string
-  affectedLocations?: number
+  status: string
+  ticket?: string
+  error?: string
 }
 
 export const api = {
@@ -101,62 +89,68 @@ export const api = {
     return request<HealthResponse>('/api/health')
   },
 
-  login(uuid: string, password: string): Promise<AuthResponse> {
+  async login(uuid: string, password: string): Promise<AuthResponse> {
+    const formData = buildFormData({ uuid, password })
     return request<AuthResponse>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ uuid, password }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData,
     })
   },
 
-  register(uuid: string, username: string, password: string): Promise<AuthResponse> {
+  async register(uuid: string, username: string, password: string): Promise<AuthResponse> {
+    const formData = buildFormData({ uuid, username, password })
     return request<AuthResponse>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ uuid, username, password }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData,
     })
   },
 
-  bind(bindToken: string, username: string, password: string): Promise<AuthResponse> {
+  async bind(bindToken: string, username: string, password: string): Promise<AuthResponse> {
+    const formData = buildFormData({ bind_token: bindToken, username, password })
     return request<AuthResponse>('/api/auth/bind', {
       method: 'POST',
-      body: JSON.stringify({ bindToken, username, password }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData,
     })
   },
 
-  autoLogin(bindToken: string): Promise<AuthResponse> {
-    return request<AuthResponse>(`/api/auth/auto-login?bindToken=${encodeURIComponent(bindToken)}`)
+  autoLogin(bindToken: string): Promise<AutoLoginResponse> {
+    return request<AutoLoginResponse>(`/api/auth/auto-login?bind_token=${encodeURIComponent(bindToken)}`)
   },
 
-  refreshToken(token: string): Promise<AuthResponse> {
-    return request<AuthResponse>('/api/auth/refresh', {
+  async refreshToken(token: string): Promise<{ token: string }> {
+    const formData = buildFormData({ token })
+    return request<{ token: string }>('/api/auth/refresh', {
       method: 'POST',
-      body: JSON.stringify({ token }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData,
     })
   },
 
   queryBlocks(params: QueryParams): Promise<QueryResponse> {
-    const query = buildQueryString(params)
-    return request<QueryResponse>(`/api/query/blocks${query}`)
+    return request<QueryResponse>(`/api/query/blocks${buildQueryString(params)}`)
   },
 
   queryContainers(params: QueryParams): Promise<QueryResponse> {
-    const query = buildQueryString(params)
-    return request<QueryResponse>(`/api/query/containers${query}`)
+    return request<QueryResponse>(`/api/query/containers${buildQueryString(params)}`)
   },
 
   queryInventory(params: QueryParams): Promise<QueryResponse> {
-    const query = buildQueryString(params)
-    return request<QueryResponse>(`/api/query/inventory${query}`)
+    return request<QueryResponse>(`/api/query/inventory${buildQueryString(params)}`)
   },
 
-  rollbackPreview(params: RollbackPreviewParams): Promise<RollbackPreviewResponse> {
-    const query = buildQueryString(params as any)
-    return request<RollbackPreviewResponse>(`/api/rollback/preview${query}`)
+  rollbackPreview(params: Record<string, any>): Promise<RollbackPreviewResponse> {
+    return request<RollbackPreviewResponse>(`/api/rollback/preview${buildQueryString(params)}`)
   },
 
-  rollbackExecute(params: RollbackExecuteParams): Promise<RollbackExecuteResponse> {
+  async rollbackExecute(params: Record<string, any>): Promise<RollbackExecuteResponse> {
+    const formData = buildFormData(params)
     return request<RollbackExecuteResponse>('/api/rollback/execute', {
       method: 'POST',
-      body: JSON.stringify(params),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData,
     })
   },
 }

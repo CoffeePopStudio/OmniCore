@@ -21,26 +21,17 @@ const routes: RouteRecordRaw[] = [
     children: [
       {
         path: '',
+        redirect: '/dashboard',
+      },
+      {
+        path: 'dashboard',
         name: 'Dashboard',
         component: () => import('../views/DashboardView.vue'),
       },
       {
-        path: 'query/blocks',
-        name: 'QueryBlocks',
+        path: 'query',
+        name: 'Query',
         component: () => import('../views/QueryView.vue'),
-        meta: { queryType: 'blocks' },
-      },
-      {
-        path: 'query/containers',
-        name: 'QueryContainers',
-        component: () => import('../views/QueryView.vue'),
-        meta: { queryType: 'containers' },
-      },
-      {
-        path: 'query/inventory',
-        name: 'QueryInventory',
-        component: () => import('../views/QueryView.vue'),
-        meta: { queryType: 'inventory' },
       },
       {
         path: 'rollback',

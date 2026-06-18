@@ -1,78 +1,69 @@
 import { defineStore } from 'pinia'
-import { api } from '../api/client'
+import { ref, computed } from 'vue'
+import { api, type AuthResponse } from '@/api/client'
 
-interface AuthState {
-  token: string
-  uuid: string
-  username: string
-}
+export const useAuthStore = defineStore('auth', () => {
+  const token = ref(localStorage.getItem('token') || '')
+  const uuid = ref(localStorage.getItem('uuid') || '')
+  const username = ref(localStorage.getItem('username') || '')
 
-export const useAuthStore = defineStore('auth', {
-  state: (): AuthState => ({
-    token: localStorage.getItem('token') || '',
-    uuid: localStorage.getItem('uuid') || '',
-    username: localStorage.getItem('username') || '',
-  }),
+  const isLoggedIn = computed(() => !!token.value)
 
-  getters: {
-    isAuthenticated(): boolean {
-      return !!this.token
-    },
-  },
+  function setAuth(data: AuthResponse) {
+    token.value = data.token
+    uuid.value = data.uuid
+    username.value = data.username
+    localStorage.setItem('token', data.token)
+    localStorage.setItem('uuid', data.uuid)
+    localStorage.setItem('username', data.username)
+  }
 
-  actions: {
-    async login(uuid: string, password: string) {
-      const response = await api.login(uuid, password)
-      this.token = response.token
-      this.uuid = response.uuid
-      this.username = response.username
-      this.persist()
-    },
+  async function login(uuidVal: string, password: string) {
+    const data = await api.login(uuidVal, password)
+    setAuth(data)
+  }
 
-    async register(uuid: string, username: string, password: string) {
-      const response = await api.register(uuid, username, password)
-      this.token = response.token
-      this.uuid = response.uuid
-      this.username = response.username
-      this.persist()
-    },
+  async function register(uuidVal: string, usernameVal: string, password: string) {
+    const data = await api.register(uuidVal, usernameVal, password)
+    setAuth(data)
+  }
 
-    async bind(bindToken: string, username: string, password: string) {
-      const response = await api.bind(bindToken, username, password)
-      this.token = response.token
-      this.uuid = response.uuid
-      this.username = response.username
-      this.persist()
-    },
+  async function bind(bindToken: string, usernameVal: string, password: string) {
+    const data = await api.bind(bindToken, usernameVal, password)
+    setAuth(data)
+  }
 
-    async autoLogin(bindToken: string) {
-      const response = await api.autoLogin(bindToken)
-      this.token = response.token
-      this.uuid = response.uuid
-      this.username = response.username
-      this.persist()
-    },
+  async function autoLogin(bindToken: string) {
+    const data = await api.autoLogin(bindToken)
+    if (data.status === 'ok' && data.token) {
+      setAuth({ token: data.token, uuid: data.uuid || '', username: '' })
+      return true
+    }
+    return false
+  }
 
-    async refreshToken() {
-      if (!this.token) return
-      const response = await api.refreshToken(this.token)
-      this.token = response.token
-      this.persist()
-    },
+  function logout() {
+    token.value = ''
+    uuid.value = ''
+    username.value = ''
+    localStorage.removeItem('token')
+    localStorage.removeItem('uuid')
+    localStorage.removeItem('username')
+  }
 
-    logout() {
-      this.token = ''
-      this.uuid = ''
-      this.username = ''
-      localStorage.removeItem('token')
-      localStorage.removeItem('uuid')
-      localStorage.removeItem('username')
-    },
+  // Check URL params for auto-login on app start
+  async function checkAutoLogin() {
+    const params = new URLSearchParams(window.location.search)
+    const bindToken = params.get('bind_token')
+    if (bindToken) {
+      const success = await autoLogin(bindToken)
+      if (success) {
+        window.history.replaceState({}, '', window.location.pathname)
+        return true
+      }
+    }
+    return false
+  }
 
-    persist() {
-      localStorage.setItem('token', this.token)
-      localStorage.setItem('uuid', this.uuid)
-      localStorage.setItem('username', this.username)
-    },
-  },
+  return { token, uuid, username, isLoggedIn, login, register, bind, autoLogin, logout, checkAutoLogin, setAuth }
 })
