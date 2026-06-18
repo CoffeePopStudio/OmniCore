@@ -1,0 +1,53 @@
+# OnmiCore Configuration
+# 语言设置 (zh / en)
+language: zh
+
+# 数据库配置
+database:
+  # 数据库类型: SQLite 或 MySQL
+  type: SQLite
+  mysql:
+    host: localhost
+    port: 3306
+    database: onmicore
+    username: root
+    password: ""
+    pool-size: 10
+
+# 数据文件存储路径 (仅 SQLite 模式)
+storage-path: plugins/OnmiCore/data
+
+# Web 面板
+web-panel:
+  enabled: true
+  port: 9812
+  require-ssl: false
+  # IP 白名单（空 = 允许所有 IP）
+  allowed-ips: []
+
+# 记录选项
+logging:
+  block-place: true
+  block-break: true
+  container-access: true
+  inventory-change: true
+  player-death: false
+  entity-death: false
+  natural-changes: false
+  explosions: false
+  # 延迟去重（毫秒）：同一玩家同一位置在此时限内先放后挖，不记录
+  dedup-time-ms: 3000
+
+# 回滚设置
+rollback:
+  blocks-per-tick: 80
+  require-confirmation: true
+  checkpoint-interval: 100
+
+# 数据保留
+retention:
+  # 清理模式: none / age / size
+  mode: age
+  max-days: 90
+  max-size-mb: 1024
+  evict-ratio: 0.05

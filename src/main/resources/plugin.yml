@@ -1,0 +1,13 @@
+name: OnmiCore
+version: '${version}'
+description: Comprehensive block logging & Git-style timeline rollback system
+main: cn.oneachina.onmiCore.OnmiCore
+api-version: '1.21.11'
+load: POSTWORLD
+authors: [ oneachina ]
+
+commands:
+  oc:
+    description: OnmiCore main command
+    usage: /oc <subcommand>
+    permission: onmicore.use
