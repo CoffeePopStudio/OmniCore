@@ -14,6 +14,7 @@ public final class WebServerManager {
     private final ConfigManager config;
     private final DatabaseManager db;
     private final AuthService authService;
+    private AuthController authController;
     private Javalin app;
 
     public WebServerManager(JavaPlugin plugin, ConfigManager config, DatabaseManager db) {
@@ -28,7 +29,7 @@ public final class WebServerManager {
 
         app = Javalin.create(configConsumer()).start(port);
 
-        AuthController authController = new AuthController(db, authService);
+        this.authController = new AuthController(db, authService);
         QueryController queryController = new QueryController(db, authService, config);
         RollbackController rollbackController = new RollbackController(db, authService, config);
 
@@ -62,6 +63,11 @@ public final class WebServerManager {
 
     public AuthService getAuthService() {
         return authService;
+    }
+
+    public String createBindToken(String uuid) {
+        if (authController == null) return null;
+        return authController.createBindToken(uuid);
     }
 
     private Consumer<JavalinConfig> configConsumer() {
