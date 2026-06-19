@@ -33,7 +33,16 @@ const routes: RouteRecordRaw[] = [
         name: 'Query',
         component: () => import('../views/QueryView.vue'),
       },
-
+      {
+        path: 'rollback',
+        name: 'Rollback',
+        component: () => import('../views/RollbackView.vue'),
+      },
+      {
+        path: 'logs',
+        name: 'Logs',
+        component: () => import('../views/LogViewer.vue'),
+      },
     ],
   },
 ]
