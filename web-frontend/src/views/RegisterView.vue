@@ -1,11 +1,8 @@
 <template>
   <n-card title="Register Web Panel Account" style="max-width: 400px; margin: 80px auto">
-    <n-alert v-if="!hasBindToken" type="warning" style="margin-bottom: 16px">
-      To register, first run <code>/oc web</code> in-game and click the generated link.
-    </n-alert>
     <n-form ref="formRef" :model="formData" :rules="rules" @submit.prevent="handleRegister">
       <n-form-item label="UUID" path="uuid">
-        <n-input v-model:value="formData.uuid" placeholder="Minecraft UUID" :disabled="bindTokenLoaded" />
+        <n-input v-model:value="formData.uuid" placeholder="Minecraft UUID" />
       </n-form-item>
       <n-form-item label="Username" path="username">
         <n-input v-model:value="formData.username" placeholder="Choose a username" />
@@ -38,8 +35,6 @@ const route = useRoute()
 const auth = useAuthStore()
 const message = useMessage()
 const loading = ref(false)
-const bindTokenLoaded = ref(false)
-const hasBindToken = ref(false)
 
 const formData = reactive({
   uuid: '',
@@ -67,12 +62,8 @@ const rules = {
 onMounted(() => {
   const bindToken = route.query.bind_token as string
   const uuidParam = route.query.uuid as string
-  if (bindToken) {
-    hasBindToken.value = true
-  }
   if (uuidParam) {
     formData.uuid = uuidParam
-    bindTokenLoaded.value = true
   }
 })
 

@@ -11,7 +11,7 @@
         </n-card>
       </n-gi>
       <n-gi>
-        <n-card title="Blocks">
+        <n-card title="Blocks Logged">
           <n-statistic :value="blockCount" />
           <template #footer>
             <n-button text @click="loadCounts">Refresh</n-button>
@@ -19,24 +19,31 @@
         </n-card>
       </n-gi>
       <n-gi>
-        <n-card title="Container">
+        <n-card title="Container Logs">
           <n-statistic :value="containerCount" />
         </n-card>
       </n-gi>
       <n-gi>
-        <n-card title="Inventory">
+        <n-card title="Inventory Logs">
           <n-statistic :value="inventoryCount" />
         </n-card>
       </n-gi>
     </n-grid>
 
+    <n-card title="User Info" style="margin-top: 16px">
+      <n-descriptions :column="2">
+        <n-descriptions-item label="UUID">{{ auth.uuid }}</n-descriptions-item>
+        <n-descriptions-item label="Username">{{ auth.username || 'N/A' }}</n-descriptions-item>
+        <n-descriptions-item label="Status">
+          <n-tag type="success">Web Panel is ready</n-tag>
+        </n-descriptions-item>
+      </n-descriptions>
+    </n-card>
+
     <n-card title="Quick Actions" style="margin-top: 16px">
       <n-space>
         <router-link to="/query">
-          <n-button type="primary">Query Blocks</n-button>
-        </router-link>
-        <router-link to="/rollback">
-          <n-button type="warning">Rollback</n-button>
+          <n-button type="primary">Query Records</n-button>
         </router-link>
       </n-space>
     </n-card>
@@ -46,7 +53,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
+import { useMessage } from 'naive-ui'
 
+const auth = useAuthStore()
+const message = useMessage()
 const health = ref<{ status: string; version?: string }>({ status: 'unknown', version: '' })
 const blockCount = ref(0)
 const containerCount = ref(0)
@@ -69,15 +80,15 @@ async function loadHealth() {
 async function loadCounts() {
   try {
     const [blocks, containers, inventory] = await Promise.all([
-      api.queryBlocks({ page: 1, pageSize: 1 }),
-      api.queryContainers({ page: 1, pageSize: 1 }),
-      api.queryInventory({ page: 1, pageSize: 1 }),
+      api.statsBlocks(),
+      api.statsContainers(),
+      api.statsInventory(),
     ])
-    blockCount.value = blocks.page * blocks.page_size
-    containerCount.value = containers.page * containers.page_size
-    inventoryCount.value = inventory.page * inventory.page_size
-  } catch {
-    // ignore
+    blockCount.value = blocks.count
+    containerCount.value = containers.count
+    inventoryCount.value = inventory.count
+  } catch (e: any) {
+    message.error('Failed to load counts: ' + (e.message || 'Unknown error'))
   }
 }
 </script>

@@ -1,5 +1,9 @@
 <template>
   <n-card title="Login" style="max-width: 400px; margin: 80px auto">
+    <n-alert v-if="hasBindToken" type="info" style="margin-bottom: 16px">
+      A bind token was detected. If you haven't registered yet, please go to
+      <router-link to="/register">Register</router-link> first.
+    </n-alert>
     <n-form ref="formRef" :model="formData" :rules="rules" @submit.prevent="handleLogin">
       <n-form-item label="UUID" path="uuid">
         <n-input v-model:value="formData.uuid" placeholder="Enter your Minecraft UUID" />
@@ -19,15 +23,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useMessage } from 'naive-ui'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const message = useMessage()
 const loading = ref(false)
+const hasBindToken = ref(false)
 
 const formData = reactive({
   uuid: '',
@@ -38,6 +44,17 @@ const rules = {
   uuid: [{ required: true, message: 'Please enter your UUID' }],
   password: [{ required: true, message: 'Please enter your password' }],
 }
+
+onMounted(() => {
+  const bindToken = route.query.bind_token as string
+  const uuidParam = route.query.uuid as string
+  if (bindToken) {
+    hasBindToken.value = true
+  }
+  if (uuidParam) {
+    formData.uuid = uuidParam
+  }
+})
 
 async function handleLogin() {
   try {

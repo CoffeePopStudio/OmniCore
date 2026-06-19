@@ -32,7 +32,6 @@ const activeKey = computed(() => route.path)
 const menuOptions = [
   { label: 'Dashboard', key: '/dashboard' },
   { label: 'Query', key: '/query' },
-  { label: 'Rollback', key: '/rollback' },
 ]
 
 function handleMenuSelect(key: string) {

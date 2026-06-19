@@ -2,30 +2,32 @@
   <div>
     <n-h2>Query Records</n-h2>
     <n-card style="margin-bottom: 16px">
-      <n-grid :cols="6" :x-gap="12" :y-gap="12">
-        <n-gi>
-          <n-select v-model:value="queryType" :options="typeOptions" />
-        </n-gi>
-        <n-gi>
-          <n-input v-model:value="filters.player" placeholder="Player name" />
-        </n-gi>
-        <n-gi>
-          <n-input v-model:value="filters.type" placeholder="Block/item type" />
-        </n-gi>
-        <n-gi>
-          <n-input v-model:value="filters.world" placeholder="World" />
-        </n-gi>
-        <n-gi>
-          <n-input v-model:value="filters.timeFrom" placeholder="From (e.g. 2024-01-01)" />
-        </n-gi>
-        <n-gi>
-          <n-input v-model:value="filters.timeTo" placeholder="To (e.g. 2024-12-31)" />
-        </n-gi>
-      </n-grid>
-      <n-space style="margin-top: 12px">
-        <n-button type="primary" @click="doQuery" :loading="loading">Search</n-button>
-        <n-button @click="resetFilters">Reset</n-button>
-      </n-space>
+      <n-form @submit.prevent="doQuery">
+        <n-grid :cols="6" :x-gap="12" :y-gap="12">
+          <n-gi>
+            <n-select v-model:value="queryType" :options="typeOptions" />
+          </n-gi>
+          <n-gi>
+            <n-input v-model:value="filters.player" placeholder="Player name" />
+          </n-gi>
+          <n-gi>
+            <n-input v-model:value="filters.type" placeholder="Block/item type" />
+          </n-gi>
+          <n-gi>
+            <n-input v-model:value="filters.world" placeholder="World" />
+          </n-gi>
+          <n-gi>
+            <n-input v-model:value="filters.timeFrom" placeholder="From (e.g. 2024-01-01)" />
+          </n-gi>
+          <n-gi>
+            <n-input v-model:value="filters.timeTo" placeholder="To (e.g. 2024-12-31)" />
+          </n-gi>
+        </n-grid>
+        <n-space style="margin-top: 12px">
+          <n-button type="primary" attr-type="submit" :loading="loading">Search</n-button>
+          <n-button @click="resetFilters">Reset</n-button>
+        </n-space>
+      </n-form>
     </n-card>
 
     <n-card>
@@ -35,9 +37,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, h } from 'vue'
+import { ref, reactive, computed, h, onMounted } from 'vue'
 import { api, type QueryResponse } from '@/api/client'
-import { NTag, NButton, NPopconfirm, useMessage } from 'naive-ui'
+import { NTag, useMessage } from 'naive-ui'
 
 const message = useMessage()
 const loading = ref(false)
@@ -107,12 +109,15 @@ const columns = computed(() => {
     ]
   }
 
-  // inventory
   return [
     ...baseCols,
     { title: 'Item', key: 'item_type', width: 120 },
     { title: 'Amount', key: 'item_amount', width: 80 },
   ]
+})
+
+onMounted(() => {
+  doQuery()
 })
 
 async function doQuery() {
