@@ -165,7 +165,8 @@ public final class AuthController {
             ps.setString(1, uuid);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
-                    ctx.json(Map.of("status", "not_registered", "uuid", uuid, "bind_token", bindToken));
+                    String redirectUrl = "/#/register?bind_token=" + bindToken + "&uuid=" + uuid;
+                    ctx.redirect(redirectUrl);
                     return;
                 }
                 String encryptedToken = rs.getString("token_encrypted");
@@ -184,7 +185,8 @@ public final class AuthController {
                         up.executeUpdate();
                     }
                 }
-                ctx.json(Map.of("status", "ok", "token", token, "uuid", uuid));
+                String dashboardUrl = "/#/dashboard?token=" + token;
+                ctx.redirect(dashboardUrl);
             }
         } catch (Exception e) {
             ctx.status(500).json(Map.of("error", e.getMessage()));
