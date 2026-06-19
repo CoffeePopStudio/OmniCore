@@ -1,8 +1,9 @@
 <template>
-  <div>
-    <n-h2>Query Records</n-h2>
-    <n-card style="margin-bottom: 16px">
-      <n-form @submit.prevent="doQuery">
+  <div class="query-view">
+    <div class="text-title-1 page-title">Query Records</div>
+
+    <div class="glass-card filter-card">
+      <form @submit.prevent="doQuery">
         <n-grid :cols="6" :x-gap="12" :y-gap="12">
           <n-gi>
             <n-select v-model:value="queryType" :options="typeOptions" />
@@ -23,30 +24,44 @@
             <n-input v-model:value="filters.timeTo" placeholder="To (e.g. 2024-12-31)" />
           </n-gi>
         </n-grid>
-        <n-space style="margin-top: 12px">
-          <n-button type="primary" attr-type="submit" :loading="loading">Search</n-button>
-          <n-button @click="resetFilters">Reset</n-button>
-        </n-space>
-      </n-form>
-    </n-card>
+        <div class="filter-actions">
+          <button class="glass-btn primary" type="submit" :disabled="loading">
+            <LoadingSpinner v-if="loading" />
+            <AppIcon v-else name="search" />
+            Search
+          </button>
+          <button class="glass-btn" type="button" @click="resetFilters">Reset</button>
+        </div>
+      </form>
+    </div>
 
-    <n-card>
-      <n-data-table :columns="columns" :data="records" :loading="loading" :pagination="pagination" :bordered="true" @update:page="onPageChange" />
-    </n-card>
+    <div class="glass-card table-card">
+      <n-data-table
+        :columns="columns"
+        :data="records"
+        :loading="loading"
+        :pagination="pagination"
+        :bordered="false"
+        @update:page="onPageChange"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, h, onMounted, watch } from 'vue'
-import { api, type QueryResponse } from '@/api/client'
+import { ref, reactive, computed, h, onMounted } from 'vue'
+import { api } from '@/api/client'
 import { NTag, useMessage } from 'naive-ui'
+import type { QueryType, BlockRecord, ContainerRecord, InventoryRecord } from '@/types'
+import AppIcon from '@/components/AppIcon.vue'
+import LoadingSpinner from '@/components/LoadingSpinner.vue'
 
 const message = useMessage()
 const loading = ref(false)
-const records = ref<any[]>([])
+const records = ref<(BlockRecord | ContainerRecord | InventoryRecord)[]>([])
 const currentPage = ref(1)
 const pageSize = 50
-const queryType = ref('blocks')
+const queryType = ref<QueryType>('blocks')
 
 const typeOptions = [
   { label: 'Blocks', value: 'blocks' },
@@ -83,7 +98,7 @@ const columns = computed(() => {
     { title: 'Player', key: 'player_name', width: 120 },
     {
       title: 'Action', key: 'action', width: 100,
-      render(row: any) {
+      render(row: BlockRecord | ContainerRecord | InventoryRecord) {
         return h(NTag, { type: (actionColors[row.action] || 'default') as any, size: 'small' }, () => row.action)
       },
     },
@@ -93,7 +108,7 @@ const columns = computed(() => {
     return [
       ...baseCols,
       { title: 'World', key: 'world', width: 100 },
-      { title: 'Position', key: 'pos', width: 120, render(row: any) { return `${row.x}, ${row.y}, ${row.z}` } },
+      { title: 'Position', key: 'pos', width: 120, render(row: BlockRecord) { return `${row.x}, ${row.y}, ${row.z}` } },
       { title: 'Old Block', key: 'old_block_type', width: 120 },
       { title: 'New Block', key: 'new_block_type', width: 120 },
     ]
@@ -103,7 +118,7 @@ const columns = computed(() => {
     return [
       ...baseCols,
       { title: 'World', key: 'world', width: 100 },
-      { title: 'Position', key: 'pos', width: 120, render(row: any) { return `${row.x}, ${row.y}, ${row.z}` } },
+      { title: 'Position', key: 'pos', width: 120, render(row: ContainerRecord) { return `${row.x}, ${row.y}, ${row.z}` } },
       { title: 'Item', key: 'item_type', width: 120 },
       { title: 'Amount', key: 'item_amount', width: 80 },
     ]
@@ -120,15 +135,11 @@ onMounted(() => {
   doQuery()
 })
 
-watch(queryType, () => {
-  doQuery()
-})
-
 async function doQuery() {
   loading.value = true
   currentPage.value = 1
   try {
-    const params: any = {
+    const params: Record<string, any> = {
       page: currentPage.value,
       pageSize,
       player: filters.player || undefined,
@@ -141,7 +152,7 @@ async function doQuery() {
       else params.item_type = filters.type
     }
 
-    let result: QueryResponse
+    let result
     if (queryType.value === 'blocks') result = await api.queryBlocks(params)
     else if (queryType.value === 'containers') result = await api.queryContainers(params)
     else result = await api.queryInventory(params)
@@ -168,3 +179,65 @@ function onPageChange(page: number) {
   doQuery()
 }
 </script>
+
+<style scoped>
+.query-view {
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.page-title {
+  margin-bottom: 28px;
+}
+
+.filter-card {
+  padding: 24px;
+  margin-bottom: 28px;
+  position: relative;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--lg-glass-border);
+}
+
+.table-card {
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  box-shadow: var(--lg-shadow), 0 0 0 1px var(--lg-glass-highlight) inset;
+}
+
+.table-card :deep(.n-data-table) {
+  --n-td-color: transparent;
+  --n-th-color: transparent;
+}
+
+.table-card :deep(.n-data-table-th) {
+  background: var(--lg-glass);
+  backdrop-filter: var(--lg-blur);
+  -webkit-backdrop-filter: var(--lg-blur);
+}
+
+.table-card :deep(.n-data-table-tr:hover) {
+  background: var(--lg-glass-hover);
+}
+
+.table-card :deep(.n-data-table-pagination) {
+  padding: 16px 24px;
+  border-top: 1px solid var(--lg-glass-border);
+  background: var(--lg-glass);
+  backdrop-filter: var(--lg-blur);
+  -webkit-backdrop-filter: var(--lg-blur);
+}
+
+.glass-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+</style>

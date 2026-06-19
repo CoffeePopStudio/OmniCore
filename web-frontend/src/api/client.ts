@@ -1,8 +1,19 @@
+import type {
+  HealthResponse,
+  AuthResponse,
+  AutoLoginResponse,
+  QueryResponse,
+  RollbackPreviewResponse,
+  RollbackExecuteResponse,
+  RollbackProgressResponse,
+  LogsResponse,
+  StatsResponse,
+} from '@/types'
+
 const BASE_URL = window.location.origin
 
-function getTokenParam(): string {
-  const token = localStorage.getItem('token')
-  return token ? `token=${encodeURIComponent(token)}` : ''
+function getToken(): string {
+  return localStorage.getItem('token') || ''
 }
 
 function buildFormData(data: Record<string, any>): URLSearchParams {
@@ -15,16 +26,28 @@ function buildFormData(data: Record<string, any>): URLSearchParams {
   return params
 }
 
-async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const token = getTokenParam()
-  const separator = url.includes('?') ? '&' : '?'
-  const fullUrl = token ? `${BASE_URL}${url}${separator}${token}` : `${BASE_URL}${url}`
+function buildQueryString(params: Record<string, any>): string {
+  const parts: string[] = []
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    }
+  }
+  return parts.length > 0 ? `?${parts.join('&')}` : ''
+}
 
-  const response = await fetch(fullUrl, {
+async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken()
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string>),
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  const response = await fetch(`${BASE_URL}${url}`, {
     ...options,
-    headers: {
-      ...options.headers,
-    },
+    headers,
   })
 
   if (!response.ok) {
@@ -33,69 +56,6 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   }
 
   return response.json()
-}
-
-export interface HealthResponse {
-  status: string
-  version?: string
-}
-
-export interface AuthResponse {
-  token: string
-  uuid: string
-  username: string
-}
-
-export interface AutoLoginResponse {
-  status: string
-  token?: string
-  uuid?: string
-  bind_token?: string
-}
-
-export interface QueryParams {
-  player?: string
-  type?: string
-  world?: string
-  x?: number
-  y?: number
-  z?: number
-  radius?: number
-  timeStart?: string
-  timeEnd?: string
-  page?: number
-  pageSize?: number
-}
-
-export interface QueryResponse {
-  records: any[]
-  page: number
-  page_size: number
-}
-
-export interface RollbackPreviewResponse {
-  preview: Record<string, string>
-  count: number
-}
-
-export interface RollbackExecuteResponse {
-  status: string
-  ticket?: string
-  error?: string
-}
-
-export interface RollbackProgressResponse {
-  progress: number
-}
-
-export interface LogsResponse {
-  content: string
-  total_lines: number
-  lines_requested: number
-}
-
-export interface StatsResponse {
-  count: number
 }
 
 export const api = {
@@ -143,15 +103,15 @@ export const api = {
     })
   },
 
-  queryBlocks(params: QueryParams): Promise<QueryResponse> {
+  queryBlocks(params: Record<string, any>): Promise<QueryResponse> {
     return request<QueryResponse>(`/api/query/blocks${buildQueryString(params)}`)
   },
 
-  queryContainers(params: QueryParams): Promise<QueryResponse> {
+  queryContainers(params: Record<string, any>): Promise<QueryResponse> {
     return request<QueryResponse>(`/api/query/containers${buildQueryString(params)}`)
   },
 
-  queryInventory(params: QueryParams): Promise<QueryResponse> {
+  queryInventory(params: Record<string, any>): Promise<QueryResponse> {
     return request<QueryResponse>(`/api/query/inventory${buildQueryString(params)}`)
   },
 
@@ -188,14 +148,4 @@ export const api = {
   statsInventory(): Promise<StatsResponse> {
     return request<StatsResponse>('/api/stats/inventory')
   },
-}
-
-function buildQueryString(params: Record<string, any>): string {
-  const parts: string[] = []
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== '') {
-      parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-    }
-  }
-  return parts.length > 0 ? `?${parts.join('&')}` : ''
 }

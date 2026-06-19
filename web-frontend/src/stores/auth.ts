@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api, type AuthResponse } from '@/api/client'
+import { api } from '@/api/client'
+import type { AuthResponse } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token') || '')
@@ -51,14 +52,25 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('username')
   }
 
-  // Check URL params for auto-login on app start
-  async function checkAutoLogin() {
+  function getQueryParam(param: string): string | null {
     const params = new URLSearchParams(window.location.search)
-    const bindToken = params.get('bind_token')
+    if (params.has(param)) return params.get(param)
+    const hash = window.location.hash
+    const hashIndex = hash.indexOf('?')
+    if (hashIndex !== -1) {
+      const hashParams = new URLSearchParams(hash.slice(hashIndex))
+      if (hashParams.has(param)) return hashParams.get(param)
+    }
+    return null
+  }
+
+  async function checkAutoLogin() {
+    const bindToken = getQueryParam('bind_token')
     if (bindToken) {
       const success = await autoLogin(bindToken)
       if (success) {
-        window.history.replaceState({}, '', window.location.pathname)
+        const cleanUrl = window.location.origin + window.location.pathname + window.location.hash.split('?')[0]
+        window.history.replaceState({}, '', cleanUrl)
         return true
       }
     }

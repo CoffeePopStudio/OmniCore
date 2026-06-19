@@ -1,27 +1,31 @@
 <template>
-  <n-card title="Register Web Panel Account" style="max-width: 400px; margin: 80px auto">
-    <n-form ref="formRef" :model="formData" :rules="rules" @submit.prevent="handleRegister">
-      <n-form-item label="UUID" path="uuid">
-        <n-input v-model:value="formData.uuid" placeholder="Minecraft UUID" />
-      </n-form-item>
-      <n-form-item label="Username" path="username">
-        <n-input v-model:value="formData.username" placeholder="Choose a username" />
-      </n-form-item>
-      <n-form-item label="Password" path="password">
-        <n-input v-model:value="formData.password" type="password" show-password-on="click" placeholder="Choose a password" />
-      </n-form-item>
-      <n-form-item label="Confirm Password" path="confirmPassword">
-        <n-input v-model:value="formData.confirmPassword" type="password" show-password-on="click" placeholder="Confirm your password" />
-      </n-form-item>
-      <n-button type="primary" attr-type="submit" :loading="loading" block>
-        Register
-      </n-button>
-    </n-form>
-    <p style="margin-top: 16px; text-align: center">
-      Already have an account?
-      <router-link to="/login">Login</router-link>
-    </p>
-  </n-card>
+  <div class="register-page">
+    <div class="glass-card register-card">
+      <h1 class="text-large-title register-title">Register</h1>
+      <p class="text-callout register-subtitle">Create your Web Panel account</p>
+      <n-form ref="formRef" :model="formData" :rules="rules" @submit.prevent="handleRegister">
+        <n-form-item label="UUID" path="uuid">
+          <n-input v-model:value="formData.uuid" placeholder="Minecraft UUID" />
+        </n-form-item>
+        <n-form-item label="Username" path="username">
+          <n-input v-model:value="formData.username" placeholder="Choose a username" />
+        </n-form-item>
+        <n-form-item label="Password" path="password">
+          <n-input v-model:value="formData.password" type="password" show-password-on="click" placeholder="Choose a password" />
+        </n-form-item>
+        <n-form-item label="Confirm Password" path="confirmPassword">
+          <n-input v-model:value="formData.confirmPassword" type="password" show-password-on="click" placeholder="Confirm your password" />
+        </n-form-item>
+        <n-button type="primary" attr-type="submit" :loading="loading" block>
+          Register
+        </n-button>
+      </n-form>
+      <p class="footer-link">
+        Already have an account?
+        <router-link to="/login">Login</router-link>
+      </p>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -85,3 +89,49 @@ async function handleRegister() {
   }
 }
 </script>
+
+<style scoped>
+.register-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.register-card {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  padding: 36px 32px 32px;
+}
+
+.register-title {
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.register-subtitle {
+  text-align: center;
+  color: var(--lg-text-secondary);
+  margin-bottom: 28px;
+}
+
+.footer-link {
+  margin-top: 24px;
+  text-align: center;
+  color: var(--lg-text-tertiary);
+  font-size: 14px;
+}
+
+.footer-link a {
+  color: var(--lg-text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.footer-link a:hover {
+  color: var(--lg-accent);
+}
+</style>
