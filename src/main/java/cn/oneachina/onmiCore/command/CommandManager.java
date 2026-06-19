@@ -34,13 +34,14 @@ public final class CommandManager implements CommandExecutor, TabCompleter {
         subCommands.put("status", new AdminCommand());
         subCommands.put("reload", new AdminCommand());
         subCommands.put("migrate-world", new AdminCommand());
+        subCommands.put("logs", new LogsCommand());
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (args.length == 0) {
             sender.sendMessage(plugin.getMessageManager().get("prefix").append(
-                    Component.text(" /oc <inspect|query|rollback|restore|web|purge|status|reload>")));
+                    Component.text(" /oc <inspect|query|rollback|restore|web|purge|status|reload|logs>")));
             return true;
         }
         SubCommand sub = subCommands.get(args[0].toLowerCase());
