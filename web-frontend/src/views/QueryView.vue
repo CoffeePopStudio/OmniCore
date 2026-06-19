@@ -55,6 +55,7 @@ import { NTag, useMessage } from 'naive-ui'
 import type { QueryType, BlockRecord, ContainerRecord, InventoryRecord } from '@/types'
 import AppIcon from '@/components/AppIcon.vue'
 import LoadingSpinner from '@/components/LoadingSpinner.vue'
+import { formatTimestamp } from '@/utils/format'
 
 const message = useMessage()
 const loading = ref(false)
@@ -94,7 +95,11 @@ const actionColors: Record<string, string> = {
 
 const columns = computed(() => {
   const baseCols = [
-    { title: 'Time', key: 'timestamp', width: 160, sortable: true },
+    { title: 'Time', key: 'timestamp', width: 160, sortable: true,
+      render(row: BlockRecord | ContainerRecord | InventoryRecord) {
+        return formatTimestamp(row.timestamp)
+      },
+    },
     { title: 'Player', key: 'player_name', width: 120 },
     {
       title: 'Action', key: 'action', width: 100,

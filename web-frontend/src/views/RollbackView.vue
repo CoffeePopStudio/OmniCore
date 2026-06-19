@@ -274,6 +274,16 @@ function resetFilters() {
   to { opacity: 1; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .preview-card,
+  .progress-card {
+    animation: none;
+  }
+  .success-message {
+    animation: none;
+  }
+}
+
 @media (max-width: 768px) {
   .filter-grid {
     grid-template-columns: repeat(2, 1fr);

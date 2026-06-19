@@ -61,6 +61,7 @@ import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useMessage } from 'naive-ui'
 import AppIcon from '@/components/AppIcon.vue'
+import { safeCount } from '@/utils/format'
 
 const auth = useAuthStore()
 const message = useMessage()
@@ -90,21 +91,21 @@ const statCards = computed(() => [
   },
   {
     label: 'Blocks Logged',
-    value: blockCount.value.toLocaleString(),
+    value: safeCount(blockCount.value),
     color: 'blue',
     iconName: 'blocks',
     footer: '',
   },
   {
     label: 'Container Logs',
-    value: containerCount.value.toLocaleString(),
+    value: safeCount(containerCount.value),
     color: 'amber',
     iconName: 'container',
     footer: '',
   },
   {
     label: 'Inventory Logs',
-    value: inventoryCount.value.toLocaleString(),
+    value: safeCount(inventoryCount.value),
     color: 'purple',
     iconName: 'inventory',
     footer: '',
