@@ -55,10 +55,6 @@ tasks {
         mergeServiceFiles()
         exclude("META-INF/LICENSE*")
         exclude("META-INF/NOTICE*")
-        minimize {
-            exclude(dependency("org.xerial:sqlite-jdbc:.*"))
-            exclude(dependency("com.mysql:mysql-connector-j:.*"))
-        }
     }
 
     runServer {
