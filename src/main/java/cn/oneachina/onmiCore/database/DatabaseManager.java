@@ -11,7 +11,7 @@ import java.sql.Statement;
 
 public final class DatabaseManager {
 
-    private static final int DATABASE_VERSION = 1;
+    private static final int DATABASE_VERSION = 2;
 
     private final JavaPlugin plugin;
     private final String type;
@@ -65,9 +65,26 @@ public final class DatabaseManager {
         String username = plugin.getConfig().getString("database.mysql.username", "root");
         String password = plugin.getConfig().getString("database.mysql.password", "");
         int poolSize = plugin.getConfig().getInt("database.mysql.pool-size", 10);
+        boolean useSSL = plugin.getConfig().getBoolean("database.mysql.use-ssl", false);
+        boolean verifyServerCertificate = plugin.getConfig().getBoolean("database.mysql.verify-server-certificate", false);
+        String trustCertificateKeyStoreUrl = plugin.getConfig().getString("database.mysql.trust-certificate-keystore-url", "");
 
-        config.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database
-                + "?useSSL=false&serverTimezone=UTC");
+        StringBuilder jdbcUrl = new StringBuilder("jdbc:mysql://")
+            .append(host).append(":").append(port).append("/").append(database)
+            .append("?serverTimezone=UTC");
+        jdbcUrl.append("&useSSL=").append(useSSL);
+        if (useSSL && verifyServerCertificate && !trustCertificateKeyStoreUrl.isEmpty()) {
+            jdbcUrl.append("&verifyServerCertificate=true");
+            jdbcUrl.append("&trustCertificateKeyStoreUrl=").append(trustCertificateKeyStoreUrl);
+            String trustKeyStorePassword = plugin.getConfig().getString("database.mysql.trust-certificate-keystore-password", "");
+            if (!trustKeyStorePassword.isEmpty()) {
+                jdbcUrl.append("&trustCertificateKeyStorePassword=").append(trustKeyStorePassword);
+            }
+        } else if (useSSL) {
+            jdbcUrl.append("&verifyServerCertificate=false");
+        }
+
+        config.setJdbcUrl(jdbcUrl.toString());
         config.setUsername(username);
         config.setPassword(password);
         config.setDriverClassName("com.mysql.cj.jdbc.Driver");
@@ -169,7 +186,39 @@ public final class DatabaseManager {
                     + ")");
 
             stmt.execute("INSERT OR IGNORE INTO meta (key_name, value) VALUES ('version', '1')");
+
+            createIndexes(stmt, isMySQL);
         }
+    }
+
+    private void createIndexes(Statement stmt, boolean isMySQL) {
+        String[] indexStatements = {
+            "CREATE INDEX IF NOT EXISTS idx_block_ts ON block_records(timestamp)",
+            "CREATE INDEX IF NOT EXISTS idx_block_pos ON block_records(world, x, y, z)",
+            "CREATE INDEX IF NOT EXISTS idx_block_player ON block_records(player_name)",
+            "CREATE INDEX IF NOT EXISTS idx_block_rollback ON block_records(rollback_id)",
+            "CREATE INDEX IF NOT EXISTS idx_container_ts ON container_records(timestamp)",
+            "CREATE INDEX IF NOT EXISTS idx_container_pos ON container_records(world, x, y, z)",
+            "CREATE INDEX IF NOT EXISTS idx_container_player ON container_records(player_name)",
+            "CREATE INDEX IF NOT EXISTS idx_inventory_ts ON inventory_records(timestamp)",
+            "CREATE INDEX IF NOT EXISTS idx_inventory_player ON inventory_records(player_name)",
+        };
+
+        for (String indexSql : indexStatements) {
+            try {
+                stmt.execute(indexSql);
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (isMySQL) {
+            try {
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_block_action ON block_records(action)");
+            } catch (Exception ignored) {
+            }
+        }
+
+        plugin.getSLF4JLogger().info("Database indexes verified");
     }
 
     public Connection getConnection() throws SQLException {

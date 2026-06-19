@@ -13,6 +13,11 @@ database:
     username: root
     password: ""
     pool-size: 10
+    # SSL 连接配置
+    use-ssl: false
+    verify-server-certificate: false
+    trust-certificate-keystore-url: ""
+    trust-certificate-keystore-password: ""
 
 # 数据文件存储路径 (仅 SQLite 模式)
 storage-path: plugins/OnmiCore/data
@@ -51,3 +56,5 @@ retention:
   max-days: 90
   max-size-mb: 1024
   evict-ratio: 0.05
+  # 自动清理检查间隔（小时）
+  purge-interval-hours: 6

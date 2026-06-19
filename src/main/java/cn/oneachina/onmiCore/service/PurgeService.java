@@ -17,6 +17,8 @@ import java.time.format.DateTimeFormatter;
 
 public class PurgeService {
 
+    private static final int PURGE_BATCH_SIZE = 1000;
+
     private static final DateTimeFormatter MYSQL_TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.of("UTC"));
 
     private final OnmiCore plugin;
@@ -28,6 +30,8 @@ public class PurgeService {
     }
 
     public void schedule() {
+        int intervalHours = plugin.getConfigManager().getPurgeIntervalHours();
+        long intervalTicks = 20L * 60L * 60L * intervalHours;
         plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> {
             ConfigManager config = plugin.getConfigManager();
             String mode = config.getRetentionMode();
@@ -46,7 +50,7 @@ public class PurgeService {
                     plugin.getSLF4JLogger().info("Auto-purged {} records (size: {}MB > {}MB limit)", purged, currentSize / 1024 / 1024, maxSize);
                 }
             }
-        }, 20L * 60L * 60L * 6L, 20L * 60L * 60L * 6L);
+        }, intervalTicks, intervalTicks);
     }
 
     public int purgeByAge(int days) {
@@ -135,31 +139,44 @@ public class PurgeService {
     }
 
     private int deleteFromTable(String table, String cutoffTimestamp) {
-        String sql = "DELETE FROM " + table + " WHERE timestamp < ?";
+        String sql = "DELETE FROM " + table + " WHERE timestamp < ? LIMIT " + PURGE_BATCH_SIZE;
 
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, cutoffTimestamp);
-            return ps.executeUpdate();
+        int totalDeleted = 0;
+        try (Connection conn = databaseManager.getConnection()) {
+            boolean hasMore;
+            do {
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setString(1, cutoffTimestamp);
+                    int deleted = ps.executeUpdate();
+                    hasMore = deleted >= PURGE_BATCH_SIZE;
+                    totalDeleted += deleted;
+                }
+            } while (hasMore);
         } catch (Exception e) {
             plugin.getSLF4JLogger().error("Failed to purge records from {}", table, e);
         }
 
-        return 0;
+        return totalDeleted;
     }
 
     private int deleteOldestFromTable(String table, long count) {
-        String sql = "DELETE FROM " + table + " WHERE id IN (SELECT id FROM " + table + " ORDER BY timestamp ASC LIMIT ?)";
+        int batches = (int) Math.ceil((double) count / PURGE_BATCH_SIZE);
+        int totalDeleted = 0;
 
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, count);
-            return ps.executeUpdate();
+        try (Connection conn = databaseManager.getConnection()) {
+            for (int i = 0; i < batches; i++) {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "DELETE FROM " + table + " WHERE id IN (SELECT id FROM " + table + " ORDER BY timestamp ASC LIMIT " + PURGE_BATCH_SIZE + ")")) {
+                    int deleted = ps.executeUpdate();
+                    totalDeleted += deleted;
+                    if (deleted < PURGE_BATCH_SIZE) break;
+                }
+            }
         } catch (Exception e) {
             plugin.getSLF4JLogger().error("Failed to purge oldest records from {}", table, e);
         }
 
-        return 0;
+        return totalDeleted;
     }
 
     private String formatTimestamp(Instant instant) {

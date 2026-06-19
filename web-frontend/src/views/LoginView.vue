@@ -21,10 +21,10 @@
 
         <n-form ref="formRef" :model="formData" :rules="rules" @submit.prevent="handleLogin">
           <n-form-item path="uuid">
-            <n-input v-model:value="formData.uuid" placeholder="Minecraft UUID" />
+            <n-input v-model:value="formData.uuid" placeholder="Minecraft UUID" autocomplete="username" />
           </n-form-item>
           <n-form-item path="password">
-            <n-input v-model:value="formData.password" type="password" show-password-on="click" placeholder="Password" />
+            <n-input v-model:value="formData.password" type="password" show-password-on="click" placeholder="Password" autocomplete="current-password" />
           </n-form-item>
           <n-button type="primary" attr-type="submit" :loading="loading" block size="large">
             Sign In

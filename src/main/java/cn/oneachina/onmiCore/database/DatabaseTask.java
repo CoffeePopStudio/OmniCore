@@ -41,6 +41,11 @@ public final class DatabaseTask {
         running.set(false);
         if (worker != null) {
             worker.interrupt();
+            try {
+                worker.join(3000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
         flush();
     }
@@ -124,7 +129,7 @@ public final class DatabaseTask {
                 } else {
                     ps.setNull(11, java.sql.Types.BLOB);
                 }
-                ps.setString(12, Timestamp.from(Instant.now()).toString());
+                ps.setTimestamp(12, Timestamp.from(Instant.now()));
                 ps.executeUpdate();
             } catch (Exception e) {
                 plugin.getSLF4JLogger().error("Failed to insert block record", e);
@@ -158,7 +163,7 @@ public final class DatabaseTask {
                 } else {
                     ps.setNull(10, java.sql.Types.BLOB);
                 }
-                ps.setString(11, Timestamp.from(Instant.now()).toString());
+                ps.setTimestamp(11, Timestamp.from(Instant.now()));
                 ps.executeUpdate();
             } catch (Exception e) {
                 plugin.getSLF4JLogger().error("Failed to insert container record", e);
@@ -187,7 +192,7 @@ public final class DatabaseTask {
                 } else {
                     ps.setNull(6, java.sql.Types.BLOB);
                 }
-                ps.setString(7, Timestamp.from(Instant.now()).toString());
+                ps.setTimestamp(7, Timestamp.from(Instant.now()));
                 ps.executeUpdate();
             } catch (Exception e) {
                 plugin.getSLF4JLogger().error("Failed to insert inventory record", e);

@@ -19,34 +19,40 @@ import java.util.UUID;
 
 public final class RollbackController {
     private final DatabaseManager db;
-    private final AuthService authService;
     private final ConfigManager config;
     private final RollbackService rollbackService;
 
-    public RollbackController(DatabaseManager db, AuthService authService, ConfigManager config) {
+    public RollbackController(DatabaseManager db, ConfigManager config) {
         this.db = db;
-        this.authService = authService;
         this.config = config;
         this.rollbackService = JavaPlugin.getPlugin(OnmiCore.class).getRollbackService();
     }
 
-    private boolean authenticate(Context ctx) {
-        String token = ctx.queryParam("token");
-        if (token == null) {
-            ctx.status(401).json(Map.of("error", "Missing token"));
-            return false;
-        }
-        String uuid = authService.getUuidFromToken(token);
+    private boolean isPermitted(Context ctx) {
+        String uuid = ctx.attribute("uuid");
         if (uuid == null) {
-            ctx.status(401).json(Map.of("error", "Invalid token"));
+            ctx.status(401).json(Map.of("error", "Not authenticated"));
             return false;
         }
-        ctx.attribute("uuid", uuid);
+        return true;
+    }
+
+    private boolean isRollbackPermitted(Context ctx) {
+        String uuid = ctx.attribute("uuid");
+        if (uuid == null) {
+            ctx.status(401).json(Map.of("error", "Not authenticated"));
+            return false;
+        }
+        org.bukkit.OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(UUID.fromString(uuid));
+        if (offlinePlayer == null || !offlinePlayer.isOnline() || !Bukkit.getPlayer(UUID.fromString(uuid)).hasPermission("onmicore.web.rollback")) {
+            ctx.status(403).json(Map.of("error", "Insufficient permissions"));
+            return false;
+        }
         return true;
     }
 
     public void preview(Context ctx) {
-        if (!authenticate(ctx)) return;
+        if (!isPermitted(ctx)) return;
         try {
             RollbackQuery query = parseQuery(ctx);
             Map<String, String> preview = rollbackService.createPreview(query);
@@ -57,7 +63,7 @@ public final class RollbackController {
     }
 
     public void execute(Context ctx) {
-        if (!authenticate(ctx)) return;
+        if (!isRollbackPermitted(ctx)) return;
         try {
             RollbackQuery query = parseQuery(ctx);
             UUID ticket = rollbackService.prepareRollback(query, null);
@@ -76,7 +82,7 @@ public final class RollbackController {
     }
 
     public void progress(Context ctx) {
-        if (!authenticate(ctx)) return;
+        if (!isPermitted(ctx)) return;
         String ticketStr = ctx.queryParam("ticket");
         if (ticketStr == null) {
             ctx.status(400).json(Map.of("error", "Missing ticket"));

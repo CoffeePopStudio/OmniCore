@@ -127,14 +127,10 @@ async function loadHealth() {
 
 async function loadCounts() {
   try {
-    const [blocks, containers, inventory] = await Promise.all([
-      api.statsBlocks(),
-      api.statsContainers(),
-      api.statsInventory(),
-    ])
-    blockCount.value = blocks.count
-    containerCount.value = containers.count
-    inventoryCount.value = inventory.count
+    const data = await api.stats()
+    blockCount.value = data.blocks ?? 0
+    containerCount.value = data.containers ?? 0
+    inventoryCount.value = data.inventory ?? 0
   } catch (e: any) {
     message.error('Failed to load counts: ' + (e.message || 'Unknown error'))
   }

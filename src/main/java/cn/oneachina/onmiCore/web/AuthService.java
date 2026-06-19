@@ -7,42 +7,64 @@ import io.jsonwebtoken.security.Keys;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
+import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Date;
 
 public final class AuthService {
 
-    private static final long TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000L; // 7 days
-    private static final int AES_KEY_LENGTH = 16; // 128-bit
+    private static final long TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000L;
+    private static final String ENV_SECRET_KEY = "ONMICORE_JWT_SECRET";
 
     private final SecretKey jwtKey;
-    private final SecretKey aesKey;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public AuthService() {
         JavaPlugin plugin = JavaPlugin.getPlugin(cn.oneachina.onmiCore.OnmiCore.class);
-        String secret = plugin.getConfig().getString("web-panel.jwt-secret", "");
-        if (secret.isEmpty()) {
-            byte[] keyBytes = new byte[32];
-            secureRandom.nextBytes(keyBytes);
-            secret = Base64.getEncoder().encodeToString(keyBytes);
-            plugin.getConfig().set("web-panel.jwt-secret", secret);
-            plugin.saveConfig();
-        }
-        byte[] keyData = secret.getBytes(StandardCharsets.UTF_8);
-        if (keyData.length < 32) {
-            byte[] padded = new byte[32];
-            System.arraycopy(keyData, 0, padded, 0, Math.min(keyData.length, 32));
-            keyData = padded;
-        }
-        this.jwtKey = Keys.hmacShaKeyFor(keyData);
+        byte[] keyBytes = loadOrGenerateSecret(plugin);
+        this.jwtKey = Keys.hmacShaKeyFor(keyBytes);
+    }
 
-        byte[] aesKeyData = new byte[AES_KEY_LENGTH];
-        System.arraycopy(keyData, 0, aesKeyData, 0, Math.min(keyData.length, AES_KEY_LENGTH));
-        this.aesKey = new SecretKeySpec(aesKeyData, "AES");
+    private static byte[] loadOrGenerateSecret(JavaPlugin plugin) {
+        String envSecret = System.getenv(ENV_SECRET_KEY);
+        if (envSecret != null && !envSecret.isEmpty()) {
+            byte[] decoded = Base64.getDecoder().decode(envSecret);
+            if (decoded.length >= 32) {
+                return decoded;
+            }
+            byte[] key = new byte[32];
+            System.arraycopy(decoded, 0, key, 0, Math.min(decoded.length, 32));
+            return key;
+        }
+
+        File secretFile = new File(plugin.getDataFolder(), "secret.key");
+        if (secretFile.exists()) {
+            try {
+                byte[] decoded = Base64.getDecoder().decode(Files.readString(secretFile.toPath()).trim());
+                if (decoded.length >= 32) return decoded;
+                byte[] key = new byte[32];
+                System.arraycopy(decoded, 0, key, 0, Math.min(decoded.length, 32));
+                return key;
+            } catch (Exception e) {
+                plugin.getSLF4JLogger().warn("Failed to read secret.key, generating new one");
+            }
+        }
+
+        byte[] keyBytes = new byte[32];
+        new SecureRandom().nextBytes(keyBytes);
+        String encoded = Base64.getEncoder().encodeToString(keyBytes);
+        try {
+            secretFile.getParentFile().mkdirs();
+            Files.writeString(secretFile.toPath(), encoded);
+            plugin.getSLF4JLogger().info("Generated new JWT secret key at {}", secretFile.getAbsolutePath());
+        } catch (IOException e) {
+            plugin.getSLF4JLogger().error("Failed to save secret.key", e);
+        }
+        return keyBytes;
     }
 
     public String hashPassword(String password) {
@@ -91,33 +113,5 @@ public final class AuthService {
         Claims claims = validateToken(token);
         if (claims == null) return null;
         return generateToken(claims.getSubject(), claims.get("username", String.class));
-    }
-
-    public String encryptAES(String data) {
-        try {
-            javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/ECB/PKCS5Padding");
-            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, aesKey);
-            byte[] encrypted = cipher.doFinal(data.getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(encrypted);
-        } catch (Exception e) {
-            return data;
-        }
-    }
-
-    public String decryptAES(String encryptedData) {
-        try {
-            javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/ECB/PKCS5Padding");
-            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, aesKey);
-            byte[] decrypted = cipher.doFinal(Base64.getDecoder().decode(encryptedData));
-            return new String(decrypted, StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            return encryptedData;
-        }
-    }
-
-    public String generateBindToken() {
-        byte[] token = new byte[32];
-        secureRandom.nextBytes(token);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(token);
     }
 }

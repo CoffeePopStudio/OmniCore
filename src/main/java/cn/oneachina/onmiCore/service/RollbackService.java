@@ -3,8 +3,10 @@ package cn.oneachina.onmiCore.service;
 import cn.oneachina.onmiCore.OnmiCore;
 import cn.oneachina.onmiCore.model.BlockRecord;
 import cn.oneachina.onmiCore.model.ContainerRecord;
+import cn.oneachina.onmiCore.util.DatabaseUtil;
 import cn.oneachina.onmiCore.util.LocationSerializer;
 import cn.oneachina.onmiCore.util.NBTCompressor;
+import cn.oneachina.onmiCore.util.SqlBuilder;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -34,6 +36,20 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RollbackService {
 
     private static final DateTimeFormatter MYSQL_TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.of("UTC"));
+
+    private static final DatabaseUtil.RowMapper<ContainerRecord> INVENTORY_MAPPER = rs -> {
+        ContainerRecord r = new ContainerRecord();
+        r.id = rs.getLong("id");
+        r.playerUuid = rs.getString("player_uuid");
+        r.playerName = rs.getString("player_name");
+        r.action = rs.getString("action");
+        r.itemType = rs.getString("item_type");
+        r.itemAmount = rs.getInt("item_amount");
+        r.itemData = rs.getBytes("item_data");
+        r.timestamp = rs.getString("timestamp");
+        r.rollbackId = rs.getInt("rollback_id");
+        return r;
+    };
 
     private final OnmiCore plugin;
     private final Map<UUID, PendingRollback> pendingMap = new ConcurrentHashMap<>();
@@ -85,12 +101,12 @@ public class RollbackService {
             int y = Integer.parseInt(parts[2]);
             int z = Integer.parseInt(parts[3]);
 
-            BlockRecord recordBefore = findLastRecordBefore(world, x, y, z, cutoff);
-            if (recordBefore != null) {
-                String targetType = recordBefore.newBlockType != null ? recordBefore.newBlockType : "air";
+            TargetState target = findTargetState(world, x, y, z, cutoff, records);
+            if (target != null) {
+                String targetType = target.blockType != null ? target.blockType : "air";
                 preview.put(locKey, "restore to " + targetType);
             } else {
-                preview.put(locKey, "remove (no prior state)");
+                preview.put(locKey, "skip (unknown prior state)");
             }
         }
 
@@ -126,12 +142,10 @@ public class RollbackService {
             int y = Integer.parseInt(parts[2]);
             int z = Integer.parseInt(parts[3]);
 
-            BlockRecord recordBefore = findLastRecordBefore(world, x, y, z, cutoff);
-            if (recordBefore != null) {
-                String blockDataStr = decompressBlockData(recordBefore.newBlockData);
-                blockTargets.add(new LocationBlockState(world, x, y, z, blockDataStr, recordBefore.newBlockType));
-            } else {
-                blockTargets.add(new LocationBlockState(world, x, y, z, null, null));
+            TargetState target = findTargetState(world, x, y, z, cutoff, records);
+            if (target != null) {
+                String blockDataStr = decompressBlockData(target.blockData);
+                blockTargets.add(new LocationBlockState(world, x, y, z, blockDataStr, target.blockType));
             }
         }
 
@@ -285,236 +299,141 @@ public class RollbackService {
     }
 
     private List<BlockRecord> queryBlockRecords(RollbackQuery query, Instant cutoff) {
-        List<BlockRecord> records = new ArrayList<>();
-        StringBuilder sql = new StringBuilder("SELECT * FROM block_records WHERE timestamp >= ?");
-        List<Object> params = new ArrayList<>();
-        params.add(formatTimestamp(cutoff));
+        SqlBuilder sql = SqlBuilder.select("*", "block_records");
+        sql.and("timestamp >= ?", formatTimestamp(cutoff));
 
         if (query.getPlayerName() != null && !query.getPlayerName().isEmpty()) {
-            sql.append(" AND player_name = ?");
-            params.add(query.getPlayerName());
+            sql.and("player_name = ?", query.getPlayerName());
         }
         if (query.getWorldName() != null && !query.getWorldName().isEmpty()) {
-            sql.append(" AND world = ?");
-            params.add(query.getWorldName());
+            sql.and("world = ?", query.getWorldName());
         }
         if (query.getBlockType() != null && !query.getBlockType().isEmpty()) {
-            sql.append(" AND (old_block_type = ? OR new_block_type = ?)");
-            params.add(query.getBlockType());
-            params.add(query.getBlockType());
+            sql.and("(old_block_type = ? OR new_block_type = ?)", query.getBlockType(), query.getBlockType());
         }
         if (query.getRadius() > 0 && query.getCenter() != null) {
-            sql.append(" AND world = ? AND x BETWEEN ? AND ? AND z BETWEEN ? AND ?");
-            params.add(query.getCenter().getWorld().getName());
+            sql.and("world = ?", query.getCenter().getWorld().getName());
             int cx = query.getCenter().getBlockX();
             int cz = query.getCenter().getBlockZ();
-            params.add(cx - query.getRadius());
-            params.add(cx + query.getRadius());
-            params.add(cz - query.getRadius());
-            params.add(cz + query.getRadius());
+            sql.and("x BETWEEN ? AND ?", cx - query.getRadius(), cx + query.getRadius());
+            sql.and("z BETWEEN ? AND ?", cz - query.getRadius(), cz + query.getRadius());
         }
 
-        sql.append(" ORDER BY timestamp DESC");
+        sql.orderBy("timestamp DESC");
 
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                ps.setObject(i + 1, params.get(i));
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    BlockRecord record = new BlockRecord();
-                    record.id = rs.getLong("id");
-                    record.world = rs.getString("world");
-                    record.x = rs.getInt("x");
-                    record.y = rs.getInt("y");
-                    record.z = rs.getInt("z");
-                    record.playerUuid = rs.getString("player_uuid");
-                    record.playerName = rs.getString("player_name");
-                    record.action = rs.getString("action");
-                    record.oldBlockType = rs.getString("old_block_type");
-                    record.newBlockType = rs.getString("new_block_type");
-                    record.oldBlockData = rs.getBytes("old_block_data");
-                    record.newBlockData = rs.getBytes("new_block_data");
-                    record.timestamp = rs.getString("timestamp");
-                    record.rollbackId = rs.getInt("rollback_id");
-                    records.add(record);
-                }
-            }
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            return DatabaseUtil.query(conn, sql.build(), sql.getParams(), BlockRecord.MAPPER, true);
         } catch (Exception e) {
             plugin.getSLF4JLogger().error("Failed to query block records for rollback", e);
+            return new ArrayList<>();
         }
-
-        return records;
     }
 
-    private BlockRecord findLastRecordBefore(String world, int x, int y, int z, Instant cutoff) {
-        String sql = "SELECT * FROM block_records WHERE world = ? AND x = ? AND y = ? AND z = ? AND timestamp < ? ORDER BY timestamp DESC LIMIT 1";
+    /**
+     * Find the target state to rollback to for a given location.
+     * Strategy:
+     * 1. Try to find the last record before the cutoff time (state at cutoff boundary)
+     * 2. If no prior records exist, use the oldBlockType from the first (oldest) record
+     *    in the time range (which IS the state at the cutoff boundary)
+     * 3. If neither is available, return null (unknown state - skip safely)
+     */
+    private TargetState findTargetState(String world, int x, int y, int z, Instant cutoff, List<BlockRecord> recordsInRange) {
+        BlockRecord recordBefore = findLastRecordBefore(world, x, y, z, cutoff);
+        if (recordBefore != null) {
+            return new TargetState(recordBefore.newBlockType, recordBefore.newBlockData);
+        }
 
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, world);
-            ps.setInt(2, x);
-            ps.setInt(3, y);
-            ps.setInt(4, z);
-            ps.setString(5, formatTimestamp(cutoff));
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    BlockRecord record = new BlockRecord();
-                    record.id = rs.getLong("id");
-                    record.world = rs.getString("world");
-                    record.x = rs.getInt("x");
-                    record.y = rs.getInt("y");
-                    record.z = rs.getInt("z");
-                    record.playerUuid = rs.getString("player_uuid");
-                    record.playerName = rs.getString("player_name");
-                    record.action = rs.getString("action");
-                    record.oldBlockType = rs.getString("old_block_type");
-                    record.newBlockType = rs.getString("new_block_type");
-                    record.oldBlockData = rs.getBytes("old_block_data");
-                    record.newBlockData = rs.getBytes("new_block_data");
-                    record.timestamp = rs.getString("timestamp");
-                    record.rollbackId = rs.getInt("rollback_id");
-                    return record;
+        BlockRecord firstInRange = null;
+        String firstTimestamp = null;
+        for (BlockRecord record : recordsInRange) {
+            if (record.world.equals(world) && record.x == x && record.y == y && record.z == z) {
+                if (firstInRange == null || record.timestamp.compareTo(firstTimestamp) < 0) {
+                    firstInRange = record;
+                    firstTimestamp = record.timestamp;
                 }
             }
-        } catch (Exception e) {
-            plugin.getSLF4JLogger().error("Failed to find last record before timestamp", e);
+        }
+
+        if (firstInRange != null) {
+            return new TargetState(firstInRange.oldBlockType, firstInRange.oldBlockData);
         }
 
         return null;
     }
 
+    private BlockRecord findLastRecordBefore(String world, int x, int y, int z, Instant cutoff) {
+        SqlBuilder sql = SqlBuilder.select("*", "block_records");
+        sql.and("world = ?", world)
+            .and("x = ?", x)
+            .and("y = ?", y)
+            .and("z = ?", z)
+            .and("timestamp < ?", formatTimestamp(cutoff))
+            .orderBy("timestamp DESC")
+            .limit(1);
+
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            return DatabaseUtil.queryOne(conn, sql.build(), sql.getParams(), BlockRecord.MAPPER);
+        } catch (Exception e) {
+            plugin.getSLF4JLogger().error("Failed to find last record before timestamp", e);
+            return null;
+        }
+    }
+
     private List<ContainerRecord> queryContainerRecords(RollbackQuery query, Instant cutoff) {
-        List<ContainerRecord> records = new ArrayList<>();
-        StringBuilder sql = new StringBuilder("SELECT * FROM container_records WHERE timestamp >= ?");
-        List<Object> params = new ArrayList<>();
-        params.add(formatTimestamp(cutoff));
+        SqlBuilder sql = SqlBuilder.select("*", "container_records");
+        sql.and("timestamp >= ?", formatTimestamp(cutoff));
 
         if (query.getPlayerName() != null && !query.getPlayerName().isEmpty()) {
-            sql.append(" AND player_name = ?");
-            params.add(query.getPlayerName());
+            sql.and("player_name = ?", query.getPlayerName());
         }
         if (query.getWorldName() != null && !query.getWorldName().isEmpty()) {
-            sql.append(" AND world = ?");
-            params.add(query.getWorldName());
+            sql.and("world = ?", query.getWorldName());
         }
         if (query.getRadius() > 0 && query.getCenter() != null) {
-            sql.append(" AND world = ? AND x BETWEEN ? AND ? AND z BETWEEN ? AND ?");
-            params.add(query.getCenter().getWorld().getName());
+            sql.and("world = ?", query.getCenter().getWorld().getName());
             int cx = query.getCenter().getBlockX();
             int cz = query.getCenter().getBlockZ();
-            params.add(cx - query.getRadius());
-            params.add(cx + query.getRadius());
-            params.add(cz - query.getRadius());
-            params.add(cz + query.getRadius());
+            sql.and("x BETWEEN ? AND ?", cx - query.getRadius(), cx + query.getRadius());
+            sql.and("z BETWEEN ? AND ?", cz - query.getRadius(), cz + query.getRadius());
         }
 
-        sql.append(" ORDER BY timestamp DESC");
+        sql.orderBy("timestamp DESC");
 
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                ps.setObject(i + 1, params.get(i));
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    ContainerRecord record = new ContainerRecord();
-                    record.id = rs.getLong("id");
-                    record.world = rs.getString("world");
-                    record.x = rs.getInt("x");
-                    record.y = rs.getInt("y");
-                    record.z = rs.getInt("z");
-                    record.playerUuid = rs.getString("player_uuid");
-                    record.playerName = rs.getString("player_name");
-                    record.action = rs.getString("action");
-                    record.itemType = rs.getString("item_type");
-                    record.itemAmount = rs.getInt("item_amount");
-                    record.itemData = rs.getBytes("item_data");
-                    record.timestamp = rs.getString("timestamp");
-                    record.rollbackId = rs.getInt("rollback_id");
-                    records.add(record);
-                }
-            }
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            return DatabaseUtil.query(conn, sql.build(), sql.getParams(), ContainerRecord.MAPPER);
         } catch (Exception e) {
             plugin.getSLF4JLogger().error("Failed to query container records for rollback", e);
+            return new ArrayList<>();
         }
-
-        return records;
     }
 
     private List<ContainerRecord> queryInventoryRecords(RollbackQuery query, Instant cutoff) {
-        List<ContainerRecord> records = new ArrayList<>();
-        StringBuilder sql = new StringBuilder("SELECT * FROM inventory_records WHERE timestamp >= ?");
-        List<Object> params = new ArrayList<>();
-        params.add(formatTimestamp(cutoff));
+        SqlBuilder sql = SqlBuilder.select("*", "inventory_records");
+        sql.and("timestamp >= ?", formatTimestamp(cutoff));
 
         if (query.getPlayerName() != null && !query.getPlayerName().isEmpty()) {
-            sql.append(" AND player_name = ?");
-            params.add(query.getPlayerName());
+            sql.and("player_name = ?", query.getPlayerName());
         }
 
-        sql.append(" ORDER BY timestamp DESC");
+        sql.orderBy("timestamp DESC");
 
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                ps.setObject(i + 1, params.get(i));
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    ContainerRecord record = new ContainerRecord();
-                    record.id = rs.getLong("id");
-                    record.playerUuid = rs.getString("player_uuid");
-                    record.playerName = rs.getString("player_name");
-                    record.action = rs.getString("action");
-                    record.itemType = rs.getString("item_type");
-                    record.itemAmount = rs.getInt("item_amount");
-                    record.itemData = rs.getBytes("item_data");
-                    record.timestamp = rs.getString("timestamp");
-                    record.rollbackId = rs.getInt("rollback_id");
-                    records.add(record);
-                }
-            }
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            return DatabaseUtil.query(conn, sql.build(), sql.getParams(), INVENTORY_MAPPER);
         } catch (Exception e) {
             plugin.getSLF4JLogger().error("Failed to query inventory records for rollback", e);
+            return new ArrayList<>();
         }
-
-        return records;
     }
 
     private List<BlockRecord> queryRecordsByRollbackId(int rollbackId) {
-        List<BlockRecord> records = new ArrayList<>();
         String sql = "SELECT * FROM block_records WHERE rollback_id = ? ORDER BY id ASC";
 
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, rollbackId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    BlockRecord record = new BlockRecord();
-                    record.id = rs.getLong("id");
-                    record.world = rs.getString("world");
-                    record.x = rs.getInt("x");
-                    record.y = rs.getInt("y");
-                    record.z = rs.getInt("z");
-                    record.playerUuid = rs.getString("player_uuid");
-                    record.playerName = rs.getString("player_name");
-                    record.action = rs.getString("action");
-                    record.oldBlockType = rs.getString("old_block_type");
-                    record.newBlockType = rs.getString("new_block_type");
-                    record.oldBlockData = rs.getBytes("old_block_data");
-                    record.newBlockData = rs.getBytes("new_block_data");
-                    record.timestamp = rs.getString("timestamp");
-                    record.rollbackId = rs.getInt("rollback_id");
-                    records.add(record);
-                }
-            }
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            return DatabaseUtil.query(conn, sql, List.of(rollbackId), BlockRecord.MAPPER);
         } catch (Exception e) {
             plugin.getSLF4JLogger().error("Failed to query records by rollback_id", e);
+            return new ArrayList<>();
         }
-
-        return records;
     }
 
     private void applyBlockRestore(LocationBlockState target, int rollbackId) {
@@ -691,6 +610,16 @@ public class RollbackService {
             return MYSQL_TS.format(instant);
         }
         return instant.toString();
+    }
+
+    private static class TargetState {
+        final String blockType;
+        final byte[] blockData;
+
+        TargetState(String blockType, byte[] blockData) {
+            this.blockType = blockType;
+            this.blockData = blockData;
+        }
     }
 
     private static class LocationBlockState {

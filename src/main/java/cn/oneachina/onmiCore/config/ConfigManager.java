@@ -53,6 +53,7 @@ public final class ConfigManager {
     public int getRetentionMaxDays() { return data.retentionMaxDays; }
     public int getRetentionMaxSizeMb() { return data.retentionMaxSizeMb; }
     public double getRetentionEvictRatio() { return data.retentionEvictRatio; }
+    public int getPurgeIntervalHours() { return data.purgeIntervalHours; }
 
     public String getDatabaseType() { return data.databaseType; }
     public String getDatabaseHost() { return data.databaseHost; }
@@ -64,38 +65,39 @@ public final class ConfigManager {
     public String getStoragePath() { return data.storagePath; }
 
     public static final class ConfigData {
-        final boolean webPanelEnabled;
-        final int webPanelPort;
-        final boolean webRequireSsl;
-        final java.util.List<String> allowedIps;
+        public final boolean webPanelEnabled;
+        public final int webPanelPort;
+        public final boolean webRequireSsl;
+        public final java.util.List<String> allowedIps;
 
-        final boolean loggingBlockPlace;
-        final boolean loggingBlockBreak;
-        final boolean loggingContainerAccess;
-        final boolean loggingInventoryChange;
-        final boolean loggingPlayerDeath;
-        final boolean loggingEntityDeath;
-        final boolean loggingNaturalChanges;
-        final boolean loggingExplosions;
-        final int dedupTimeMs;
+        public final boolean loggingBlockPlace;
+        public final boolean loggingBlockBreak;
+        public final boolean loggingContainerAccess;
+        public final boolean loggingInventoryChange;
+        public final boolean loggingPlayerDeath;
+        public final boolean loggingEntityDeath;
+        public final boolean loggingNaturalChanges;
+        public final boolean loggingExplosions;
+        public final int dedupTimeMs;
 
-        final int blocksPerTick;
-        final boolean requireConfirmation;
-        final int checkpointInterval;
+        public final int blocksPerTick;
+        public final boolean requireConfirmation;
+        public final int checkpointInterval;
 
-        final String retentionMode;
-        final int retentionMaxDays;
-        final int retentionMaxSizeMb;
-        final double retentionEvictRatio;
+        public final String retentionMode;
+        public final int retentionMaxDays;
+        public final int retentionMaxSizeMb;
+        public final double retentionEvictRatio;
+        public final int purgeIntervalHours;
 
-        final String databaseType;
-        final String databaseHost;
-        final int databasePort;
-        final String databaseName;
-        final String databaseUsername;
-        final String databasePassword;
-        final int databasePoolSize;
-        final String storagePath;
+        public final String databaseType;
+        public final String databaseHost;
+        public final int databasePort;
+        public final String databaseName;
+        public final String databaseUsername;
+        public final String databasePassword;
+        public final int databasePoolSize;
+        public final String storagePath;
 
         ConfigData(org.bukkit.configuration.file.FileConfiguration config) {
             ConfigurationSection web = config.getConfigurationSection("web-panel");
@@ -125,6 +127,7 @@ public final class ConfigManager {
             this.retentionMaxDays = ret.getInt("max-days", 90);
             this.retentionMaxSizeMb = ret.getInt("max-size-mb", 1024);
             this.retentionEvictRatio = ret.getDouble("evict-ratio", 0.05);
+            this.purgeIntervalHours = ret.getInt("purge-interval-hours", 6);
 
             ConfigurationSection db = config.getConfigurationSection("database");
             this.databaseType = db.getString("type", "SQLite");

@@ -13,7 +13,7 @@ public class RestoreCommand implements SubCommand {
 
     public RestoreCommand() {
         this.plugin = JavaPlugin.getPlugin(OnmiCore.class);
-        this.rollbackService = new RollbackService();
+        this.rollbackService = plugin.getRollbackService();
     }
 
     @Override

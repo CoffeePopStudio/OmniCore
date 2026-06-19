@@ -1,14 +1,14 @@
 package cn.oneachina.onmiCore.web;
 
 import cn.oneachina.onmiCore.database.DatabaseManager;
-import cn.oneachina.onmiCore.util.PermissionUtil;
 import io.javalin.http.Context;
 import org.bukkit.Bukkit;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.HashMap;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,6 +17,12 @@ public final class AuthController {
     private final DatabaseManager db;
     private final AuthService authService;
     private final Map<String, String> bindTokens = new ConcurrentHashMap<>();
+    private final Map<String, SessionCode> sessionCodes = new ConcurrentHashMap<>();
+    private final SecureRandom secureRandom = new SecureRandom();
+
+    private static final long SESSION_CODE_TTL_MS = 10_000;
+
+    private record SessionCode(String uuid, long expiresAt) {}
 
     public AuthController(DatabaseManager db, AuthService authService) {
         this.db = db;
@@ -48,7 +54,6 @@ public final class AuthController {
             }
             String passwordHash = authService.hashPassword(password);
             String rawToken = authService.generateToken(uuid, username);
-            String encryptedToken = authService.encryptAES(rawToken);
 
             try (Connection conn = db.getConnection();
                  PreparedStatement ps = conn.prepareStatement(
@@ -57,7 +62,7 @@ public final class AuthController {
                 ps.setString(2, Bukkit.getOfflinePlayer(UUID.fromString(uuid)).getName());
                 ps.setString(3, username);
                 ps.setString(4, passwordHash);
-                ps.setString(5, encryptedToken);
+                ps.setString(5, rawToken);
                 ps.executeUpdate();
             }
             ctx.json(Map.of("token", rawToken, "uuid", uuid, "username", username));
@@ -76,7 +81,7 @@ public final class AuthController {
             }
             try (Connection conn = db.getConnection();
                  PreparedStatement ps = conn.prepareStatement(
-                    "SELECT username, password_hash, token_encrypted FROM web_users WHERE player_uuid = ?")) {
+                    "SELECT username, password_hash FROM web_users WHERE player_uuid = ?")) {
                 ps.setString(1, uuid);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) {
@@ -90,10 +95,9 @@ public final class AuthController {
                     }
                     String username = rs.getString("username");
                     String newToken = authService.generateToken(uuid, username);
-                    String encryptedToken = authService.encryptAES(newToken);
                     try (PreparedStatement update = conn.prepareStatement(
                             "UPDATE web_users SET token_encrypted = ?, last_login = datetime('now') WHERE player_uuid = ?")) {
-                        update.setString(1, encryptedToken);
+                        update.setString(1, newToken);
                         update.setString(2, uuid);
                         update.executeUpdate();
                     }
@@ -131,7 +135,6 @@ public final class AuthController {
             }
             String passwordHash = authService.hashPassword(password);
             String rawToken = authService.generateToken(uuid, username);
-            String encryptedToken = authService.encryptAES(rawToken);
             try (Connection conn = db.getConnection();
                  PreparedStatement ps = conn.prepareStatement(
                     "INSERT INTO web_users (player_uuid, player_name, username, password_hash, token_encrypted, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")) {
@@ -139,7 +142,7 @@ public final class AuthController {
                 ps.setString(2, Bukkit.getOfflinePlayer(UUID.fromString(uuid)).getName());
                 ps.setString(3, username);
                 ps.setString(4, passwordHash);
-                ps.setString(5, encryptedToken);
+                ps.setString(5, rawToken);
                 ps.executeUpdate();
             }
             ctx.json(Map.of("token", rawToken, "uuid", uuid, "username", username));
@@ -161,7 +164,7 @@ public final class AuthController {
         }
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                "SELECT username, token_encrypted FROM web_users WHERE player_uuid = ?")) {
+                "SELECT username FROM web_users WHERE player_uuid = ?")) {
             ps.setString(1, uuid);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
@@ -169,24 +172,38 @@ public final class AuthController {
                     ctx.redirect(redirectUrl);
                     return;
                 }
-                String encryptedToken = rs.getString("token_encrypted");
-                String token = authService.decryptAES(encryptedToken);
-                if (authService.isTokenExpired(token)) {
-                    token = authService.refreshToken(token);
-                    if (token == null) {
-                        ctx.status(401).json(Map.of("error", "Token expired, please login again"));
-                        return;
-                    }
-                    String newEncrypted = authService.encryptAES(token);
-                    try (PreparedStatement up = conn.prepareStatement(
-                            "UPDATE web_users SET token_encrypted = ? WHERE player_uuid = ?")) {
-                        up.setString(1, newEncrypted);
-                        up.setString(2, uuid);
-                        up.executeUpdate();
-                    }
-                }
-                String dashboardUrl = "/#/dashboard?token=" + token;
+                String sessionCode = createSessionCode(uuid);
+                String dashboardUrl = "/#/dashboard?session=" + sessionCode;
                 ctx.redirect(dashboardUrl);
+            }
+        } catch (Exception e) {
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
+
+    public void sessionLogin(Context ctx) {
+        String sessionCode = ctx.formParam("session");
+        if (sessionCode == null) {
+            ctx.status(400).json(Map.of("error", "Missing session code"));
+            return;
+        }
+        SessionCode code = sessionCodes.remove(sessionCode);
+        if (code == null || System.currentTimeMillis() > code.expiresAt()) {
+            ctx.status(401).json(Map.of("error", "Invalid or expired session code"));
+            return;
+        }
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                "SELECT username FROM web_users WHERE player_uuid = ?")) {
+            ps.setString(1, code.uuid());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    ctx.status(401).json(Map.of("error", "User not found"));
+                    return;
+                }
+                String username = rs.getString("username");
+                String token = authService.generateToken(code.uuid(), username);
+                ctx.json(Map.of("token", token, "uuid", code.uuid(), "username", username));
             }
         } catch (Exception e) {
             ctx.status(500).json(Map.of("error", e.getMessage()));
@@ -208,8 +225,18 @@ public final class AuthController {
     }
 
     public String createBindToken(String uuid) {
-        String bindToken = authService.generateBindToken();
+        byte[] token = new byte[32];
+        secureRandom.nextBytes(token);
+        String bindToken = Base64.getUrlEncoder().withoutPadding().encodeToString(token);
         bindTokens.put(bindToken, uuid);
         return bindToken;
+    }
+
+    private String createSessionCode(String uuid) {
+        byte[] code = new byte[16];
+        secureRandom.nextBytes(code);
+        String sessionCode = Base64.getUrlEncoder().withoutPadding().encodeToString(code);
+        sessionCodes.put(sessionCode, new SessionCode(uuid, System.currentTimeMillis() + SESSION_CODE_TTL_MS));
+        return sessionCode;
     }
 }

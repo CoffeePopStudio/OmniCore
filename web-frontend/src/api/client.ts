@@ -94,6 +94,15 @@ export const api = {
     return request<AutoLoginResponse>(`/api/auth/auto-login?bind_token=${encodeURIComponent(bindToken)}`)
   },
 
+  async sessionLogin(sessionCode: string): Promise<AuthResponse> {
+    const formData = buildFormData({ session: sessionCode })
+    return request<AuthResponse>('/api/auth/session-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData,
+    })
+  },
+
   async refreshToken(token: string): Promise<{ token: string }> {
     const formData = buildFormData({ token })
     return request<{ token: string }>('/api/auth/refresh', {
@@ -135,6 +144,10 @@ export const api = {
   logsPlugin(lines?: number): Promise<LogsResponse> {
     const qs = lines ? `?lines=${lines}` : ''
     return request<LogsResponse>(`/api/logs/plugin${qs}`)
+  },
+
+  stats(): Promise<StatsResponse> {
+    return request<StatsResponse>('/api/stats')
   },
 
   statsBlocks(): Promise<StatsResponse> {

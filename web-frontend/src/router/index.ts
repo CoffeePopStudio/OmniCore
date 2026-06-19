@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import type { RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
@@ -52,11 +53,19 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const token = localStorage.getItem('token')
-  if (to.meta.requiresAuth && !token) {
+  if (!token) {
+    const handled = await useAuthStore().checkAutoLogin()
+    if (handled) {
+      next()
+      return
+    }
+  }
+  const hasToken = !!localStorage.getItem('token')
+  if (to.meta.requiresAuth && !hasToken) {
     next({ name: 'Login' })
-  } else if ((to.name === 'Login' || to.name === 'Register') && token) {
+  } else if ((to.name === 'Login' || to.name === 'Register') && hasToken) {
     next({ name: 'Dashboard' })
   } else {
     next()

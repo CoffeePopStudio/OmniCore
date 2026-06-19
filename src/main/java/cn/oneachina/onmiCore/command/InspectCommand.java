@@ -2,6 +2,8 @@ package cn.oneachina.onmiCore.command;
 
 import cn.oneachina.onmiCore.OnmiCore;
 import cn.oneachina.onmiCore.model.BlockRecord;
+import cn.oneachina.onmiCore.util.DatabaseUtil;
+import cn.oneachina.onmiCore.util.SqlBuilder;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.entity.Player;
@@ -12,9 +14,6 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -120,39 +119,19 @@ public class InspectCommand implements SubCommand, Listener {
     }
 
     private List<BlockRecord> queryRecentRecords(String world, int x, int y, int z) {
-        List<BlockRecord> records = new ArrayList<>();
-        String sql = "SELECT * FROM block_records WHERE world = ? AND x = ? AND y = ? AND z = ? ORDER BY timestamp DESC LIMIT 10";
+        SqlBuilder sql = SqlBuilder.select("*", "block_records")
+                .where("world = ?", world)
+                .and("x = ?", x)
+                .and("y = ?", y)
+                .and("z = ?", z)
+                .orderBy("timestamp DESC")
+                .limit(10);
 
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, world);
-            ps.setInt(2, x);
-            ps.setInt(3, y);
-            ps.setInt(4, z);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    BlockRecord record = new BlockRecord();
-                    record.id = rs.getLong("id");
-                    record.world = rs.getString("world");
-                    record.x = rs.getInt("x");
-                    record.y = rs.getInt("y");
-                    record.z = rs.getInt("z");
-                    record.playerUuid = rs.getString("player_uuid");
-                    record.playerName = rs.getString("player_name");
-                    record.action = rs.getString("action");
-                    record.oldBlockType = rs.getString("old_block_type");
-                    record.newBlockType = rs.getString("new_block_type");
-                    record.oldBlockData = rs.getBytes("old_block_data");
-                    record.newBlockData = rs.getBytes("new_block_data");
-                    record.timestamp = rs.getString("timestamp");
-                    record.rollbackId = rs.getInt("rollback_id");
-                    records.add(record);
-                }
-            }
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            return DatabaseUtil.query(conn, sql.build(), sql.getParams(), BlockRecord.MAPPER);
         } catch (Exception e) {
             plugin.getSLF4JLogger().error("Failed to query block records for inspect", e);
+            return List.of();
         }
-
-        return records;
     }
 }

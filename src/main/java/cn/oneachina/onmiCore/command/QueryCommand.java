@@ -2,14 +2,15 @@ package cn.oneachina.onmiCore.command;
 
 import cn.oneachina.onmiCore.OnmiCore;
 import cn.oneachina.onmiCore.model.BlockRecord;
+import cn.oneachina.onmiCore.util.DatabaseUtil;
+import cn.oneachina.onmiCore.util.SqlBuilder;
+import cn.oneachina.onmiCore.util.StringUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -63,12 +64,12 @@ public class QueryCommand implements SubCommand {
             } else if (arg.startsWith("type:")) {
                 blockType = arg.substring(5);
             } else if (arg.startsWith("radius:") && i + 3 < args.length) {
-                radius = parseInt(arg.substring(7));
-                cx = parseInt(args[++i]);
-                cy = parseInt(args[++i]);
-                cz = parseInt(args[++i]);
+                radius = StringUtil.safeParseInt(arg.substring(7), 0);
+                cx = StringUtil.safeParseInt(args[++i], 0);
+                cy = StringUtil.safeParseInt(args[++i], 0);
+                cz = StringUtil.safeParseInt(args[++i], 0);
             } else if (arg.startsWith("page:")) {
-                page = parseInt(arg.substring(5));
+                page = StringUtil.safeParseInt(arg.substring(5), 0);
                 if (page < 0) page = 0;
             }
         }
@@ -156,14 +157,6 @@ public class QueryCommand implements SubCommand {
         };
     }
 
-    private int parseInt(String s) {
-        try {
-            return Integer.parseInt(s);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
     private String formatTimestamp(Instant instant) {
         if (plugin.getDatabaseManager().isMySQL()) {
             return MYSQL_TS.format(instant);
@@ -174,125 +167,74 @@ public class QueryCommand implements SubCommand {
     private List<BlockRecord> queryBlocks(String world, int x, int y, int z,
                                            String playerName, String blockType,
                                            Duration timeAgo, int radius, int page, int pageSize) {
-        List<BlockRecord> records = new ArrayList<>();
-        StringBuilder sql = new StringBuilder("SELECT * FROM block_records WHERE 1=1");
-        List<Object> params = new ArrayList<>();
-
+        SqlBuilder sb = SqlBuilder.select("*", "block_records");
         if (world != null && !world.isEmpty()) {
-            sql.append(" AND world = ?");
-            params.add(world);
+            sb.where("world = ?", world);
         }
         if (playerName != null && !playerName.isEmpty()) {
-            sql.append(" AND player_name = ?");
-            params.add(playerName);
+            sb.where("player_name = ?", playerName);
         }
         if (blockType != null && !blockType.isEmpty()) {
-            sql.append(" AND (old_block_type = ? OR new_block_type = ?)");
-            params.add(blockType);
-            params.add(blockType);
+            sb.where("(old_block_type = ? OR new_block_type = ?)", blockType, blockType);
         }
         if (timeAgo != null) {
-            sql.append(" AND timestamp >= ?");
-            params.add(formatTimestamp(Instant.now().minus(timeAgo)));
+            sb.where("timestamp >= ?", formatTimestamp(Instant.now().minus(timeAgo)));
         }
         if (radius > 0) {
-            sql.append(" AND x BETWEEN ? AND ? AND z BETWEEN ? AND ?");
-            params.add(x - radius);
-            params.add(x + radius);
-            params.add(z - radius);
-            params.add(z + radius);
+            sb.where("x BETWEEN ? AND ?", x - radius, x + radius);
+            sb.where("z BETWEEN ? AND ?", z - radius, z + radius);
             if (!worldNullOrEmpty(world)) {
-                sql.append(" AND world = ?");
-                params.add(world);
+                sb.where("world = ?", world);
             }
         }
+        sb.orderBy("timestamp DESC");
+        sb.limit(pageSize);
+        sb.offset(page * pageSize);
 
-        sql.append(" ORDER BY timestamp DESC LIMIT ? OFFSET ?");
-        params.add(pageSize);
-        params.add(page * pageSize);
+        String sql = sb.build();
+        List<Object> params = sb.getParams();
 
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                ps.setObject(i + 1, params.get(i));
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    BlockRecord record = new BlockRecord();
-                    record.id = rs.getLong("id");
-                    record.world = rs.getString("world");
-                    record.x = rs.getInt("x");
-                    record.y = rs.getInt("y");
-                    record.z = rs.getInt("z");
-                    record.playerUuid = rs.getString("player_uuid");
-                    record.playerName = rs.getString("player_name");
-                    record.action = rs.getString("action");
-                    record.oldBlockType = rs.getString("old_block_type");
-                    record.newBlockType = rs.getString("new_block_type");
-                    record.oldBlockData = rs.getBytes("old_block_data");
-                    record.newBlockData = rs.getBytes("new_block_data");
-                    record.timestamp = rs.getString("timestamp");
-                    record.rollbackId = rs.getInt("rollback_id");
-                    records.add(record);
-                }
-            }
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            return DatabaseUtil.query(conn, sql, params, BlockRecord.MAPPER);
         } catch (Exception e) {
             plugin.getSLF4JLogger().error("Failed to query block records", e);
+            return new ArrayList<>();
         }
-
-        return records;
     }
 
     private int countBlocks(String world, int x, int y, int z,
                              String playerName, String blockType,
                              Duration timeAgo, int radius) {
-        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM block_records WHERE 1=1");
-        List<Object> params = new ArrayList<>();
-
+        SqlBuilder sb = SqlBuilder.count("block_records");
         if (world != null && !world.isEmpty()) {
-            sql.append(" AND world = ?");
-            params.add(world);
+            sb.where("world = ?", world);
         }
         if (playerName != null && !playerName.isEmpty()) {
-            sql.append(" AND player_name = ?");
-            params.add(playerName);
+            sb.where("player_name = ?", playerName);
         }
         if (blockType != null && !blockType.isEmpty()) {
-            sql.append(" AND (old_block_type = ? OR new_block_type = ?)");
-            params.add(blockType);
-            params.add(blockType);
+            sb.where("(old_block_type = ? OR new_block_type = ?)", blockType, blockType);
         }
         if (timeAgo != null) {
-            sql.append(" AND timestamp >= ?");
-            params.add(formatTimestamp(Instant.now().minus(timeAgo)));
+            sb.where("timestamp >= ?", formatTimestamp(Instant.now().minus(timeAgo)));
         }
         if (radius > 0) {
-            sql.append(" AND x BETWEEN ? AND ? AND z BETWEEN ? AND ?");
-            params.add(x - radius);
-            params.add(x + radius);
-            params.add(z - radius);
-            params.add(z + radius);
+            sb.where("x BETWEEN ? AND ?", x - radius, x + radius);
+            sb.where("z BETWEEN ? AND ?", z - radius, z + radius);
             if (!worldNullOrEmpty(world)) {
-                sql.append(" AND world = ?");
-                params.add(world);
+                sb.where("world = ?", world);
             }
         }
 
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                ps.setObject(i + 1, params.get(i));
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt(1);
-                }
-            }
+        String sql = sb.build();
+        List<Object> params = sb.getParams();
+
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            return DatabaseUtil.count(conn, sql, params);
         } catch (Exception e) {
             plugin.getSLF4JLogger().error("Failed to count block records", e);
+            return 0;
         }
-
-        return 0;
     }
 
     private boolean worldNullOrEmpty(String world) {

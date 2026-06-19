@@ -4,6 +4,7 @@ import cn.oneachina.onmiCore.config.ConfigManager;
 import cn.oneachina.onmiCore.database.DatabaseManager;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
+import io.javalin.http.Context;
 import io.javalin.http.staticfiles.Location;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -44,9 +45,11 @@ public final class WebServerManager {
 
         app = Javalin.create(configConsumer()).start(port);
 
+        addAuthMiddleware();
+
         this.authController = new AuthController(db, authService);
-        QueryController queryController = new QueryController(db, authService, config);
-        RollbackController rollbackController = new RollbackController(db, authService, config);
+        QueryController queryController = new QueryController(db, config);
+        RollbackController rollbackController = new RollbackController(db, config);
 
         app.get("/api/health", ctx -> ctx.json(new Object() {
             public final String status = "ok";
@@ -57,6 +60,7 @@ public final class WebServerManager {
         app.post("/api/auth/login", authController::login);
         app.post("/api/auth/bind", authController::bind);
         app.get("/api/auth/auto-login", authController::autoLogin);
+        app.post("/api/auth/session-login", authController::sessionLogin);
         app.post("/api/auth/refresh", authController::refresh);
 
         app.get("/api/query/blocks", queryController::queryBlocks);
@@ -68,11 +72,6 @@ public final class WebServerManager {
         app.get("/api/rollback/progress", rollbackController::progress);
 
         app.get("/api/logs/plugin", ctx -> {
-            String token = ctx.queryParam("token");
-            if (token == null || authService.getUuidFromToken(token) == null) {
-                ctx.status(401).json(Map.of("error", "Unauthorized"));
-                return;
-            }
             File logFile = new File(plugin.getDataFolder().getParentFile(), "latest.log");
             if (!logFile.exists()) {
                 ctx.json(Map.of("content", ""));
@@ -89,28 +88,20 @@ public final class WebServerManager {
             }
         });
 
-        app.get("/api/stats/blocks", ctx -> {
+        app.get("/api/stats", ctx -> {
             try (Connection conn = db.getConnection();
                  Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM block_records")) {
+                 ResultSet rs = stmt.executeQuery(
+                    "SELECT " +
+                    "  (SELECT COUNT(*) FROM block_records) AS blocks, " +
+                    "  (SELECT COUNT(*) FROM container_records) AS containers, " +
+                    "  (SELECT COUNT(*) FROM inventory_records) AS inventory")) {
                 rs.next();
-                ctx.json(Map.of("count", rs.getLong(1)));
-            }
-        });
-        app.get("/api/stats/containers", ctx -> {
-            try (Connection conn = db.getConnection();
-                 Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM container_records")) {
-                rs.next();
-                ctx.json(Map.of("count", rs.getLong(1)));
-            }
-        });
-        app.get("/api/stats/inventory", ctx -> {
-            try (Connection conn = db.getConnection();
-                 Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM inventory_records")) {
-                rs.next();
-                ctx.json(Map.of("count", rs.getLong(1)));
+                ctx.json(Map.of(
+                    "blocks", rs.getLong("blocks"),
+                    "containers", rs.getLong("containers"),
+                    "inventory", rs.getLong("inventory")
+                ));
             }
         });
 
@@ -190,5 +181,41 @@ public final class WebServerManager {
                 corsRule.anyHost();
             }));
         };
+    }
+
+    private void addAuthMiddleware() {
+        app.before("/api/*", ctx -> {
+            String path = ctx.path();
+            if (path.equals("/api/health") || path.startsWith("/api/auth/")) {
+                return;
+            }
+
+            String authHeader = ctx.header("Authorization");
+            String token = null;
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                token = authHeader.substring(7);
+            }
+
+            if (token == null || token.isEmpty()) {
+                ctx.status(401).json(Map.of("error", "Missing or invalid Authorization header"));
+                return;
+            }
+
+            String uuid = authService.getUuidFromToken(token);
+            if (uuid == null) {
+                ctx.status(401).json(Map.of("error", "Invalid or expired token"));
+                return;
+            }
+
+            ctx.attribute("uuid", uuid);
+        });
+    }
+
+    public static String extractToken(Context ctx) {
+        String authHeader = ctx.header("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authHeader.substring(7);
+        }
+        return ctx.queryParam("token");
     }
 }

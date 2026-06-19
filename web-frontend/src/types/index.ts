@@ -91,7 +91,10 @@ export interface LogsResponse {
 }
 
 export interface StatsResponse {
-  count: number
+  count?: number
+  blocks?: number
+  containers?: number
+  inventory?: number
 }
 
 export interface RollbackFilters {

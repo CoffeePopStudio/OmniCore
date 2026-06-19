@@ -43,6 +43,11 @@ export const useAuthStore = defineStore('auth', () => {
     return false
   }
 
+  async function sessionLogin(sessionCode: string) {
+    const data = await api.sessionLogin(sessionCode)
+    setAuth(data)
+  }
+
   function logout() {
     token.value = ''
     uuid.value = ''
@@ -69,13 +74,31 @@ export const useAuthStore = defineStore('auth', () => {
     if (bindToken) {
       const success = await autoLogin(bindToken)
       if (success) {
-        const cleanUrl = window.location.origin + window.location.pathname + window.location.hash.split('?')[0]
-        window.history.replaceState({}, '', cleanUrl)
+        cleanUrlOfParam('bind_token')
         return true
       }
     }
+
+    const sessionCode = getQueryParam('session')
+    if (sessionCode) {
+      await sessionLogin(sessionCode)
+      cleanUrlOfParam('session')
+      return true
+    }
+
     return false
   }
 
-  return { token, uuid, username, isLoggedIn, login, register, bind, autoLogin, logout, checkAutoLogin, setAuth }
+  function cleanUrlOfParam(param: string) {
+    const hash = window.location.hash
+    const hashPath = hash.split('?')[0]
+    const hashParams = new URLSearchParams(hash.includes('?') ? hash.slice(hash.indexOf('?')) : '')
+    hashParams.delete(param)
+    const newHash = hashParams.toString()
+      ? hashPath + '?' + hashParams.toString()
+      : hashPath
+    window.history.replaceState({}, '', window.location.origin + window.location.pathname + newHash)
+  }
+
+  return { token, uuid, username, isLoggedIn, login, register, bind, autoLogin, sessionLogin, logout, checkAutoLogin, setAuth }
 })
