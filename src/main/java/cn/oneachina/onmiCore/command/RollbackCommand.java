@@ -26,7 +26,7 @@ public class RollbackCommand implements SubCommand {
 
     public RollbackCommand() {
         this.plugin = JavaPlugin.getPlugin(OnmiCore.class);
-        this.rollbackService = new RollbackService();
+        this.rollbackService = plugin.getRollbackService();
     }
 
     @Override
