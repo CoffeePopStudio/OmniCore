@@ -2,6 +2,8 @@ package cn.oneachina.onmiCore.command;
 
 import cn.oneachina.onmiCore.OnmiCore;
 import cn.oneachina.onmiCore.model.BlockRecord;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -21,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class InspectCommand implements SubCommand, Listener {
 
     private final OnmiCore plugin;
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final Map<UUID, Boolean> inspectMode = new ConcurrentHashMap<>();
 
     public InspectCommand() {
@@ -77,17 +80,40 @@ public class InspectCommand implements SubCommand, Listener {
                 player.sendMessage(plugin.getMessageManager().get("query-header", records.size()));
                 int index = 1;
                 for (BlockRecord record : records) {
-                    String actionText = switch (record.action) {
-                        case "place" -> plugin.getMessageManager().raw("query-action-place");
-                        case "break" -> plugin.getMessageManager().raw("query-action-break");
-                        case "container" -> plugin.getMessageManager().raw("query-action-container");
-                        case "inventory" -> plugin.getMessageManager().raw("query-action-inventory");
-                        default -> record.action;
-                    };
-                    player.sendMessage(plugin.getMessageManager().get("query-entry",
-                            index++, record.timestamp, record.playerName,
-                            actionText, record.newBlockType != null ? record.newBlockType : record.oldBlockType,
-                            world + "," + x + "," + y + "," + z));
+                    String blockType;
+                    String actionVerb;
+                    switch (record.action) {
+                        case "break" -> {
+                            blockType = record.oldBlockType != null ? record.oldBlockType : "unknown";
+                            actionVerb = "破坏了";
+                        }
+                        case "place" -> {
+                            blockType = record.newBlockType != null ? record.newBlockType : "unknown";
+                            actionVerb = "放置了";
+                        }
+                        case "container" -> {
+                            blockType = record.newBlockType != null ? record.newBlockType : "container";
+                            actionVerb = "操作了容器";
+                        }
+                        case "inventory" -> {
+                            blockType = "inventory";
+                            actionVerb = "操作了物品";
+                        }
+                        default -> {
+                            blockType = record.newBlockType != null ? record.newBlockType : (record.oldBlockType != null ? record.oldBlockType : "unknown");
+                            actionVerb = "操作了";
+                        }
+                    }
+                    String locStr = record.world + " " + record.x + "," + record.y + "," + record.z;
+                    Component msg = miniMessage.deserialize(
+                            "<gray>#" + index + "</gray> <dark_gray>[</dark_gray><white>" + record.timestamp + "</white><dark_gray>]</dark_gray> " +
+                            "<aqua>" + record.playerName + "</aqua> " +
+                            "<red>" + actionVerb + "</red> " +
+                            "<yellow>" + blockType + "</yellow> " +
+                            "<dark_gray>@</dark_gray> <green>" + locStr + "</green>"
+                    );
+                    player.sendMessage(msg);
+                    index++;
                 }
             });
         });
