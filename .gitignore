@@ -24,3 +24,4 @@ docs/plans
 
 # Npm packages
 web-frontend/node_modules
+src/main/resources/web
