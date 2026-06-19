@@ -10,7 +10,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
@@ -135,7 +134,7 @@ public final class WebServerManager {
     }
 
     private void extractWebFiles() {
-        webDir = new File(plugin.getDataFolder(), "web");
+        webDir = new File(plugin.getDataFolder(), "run/plugins/OnmiCore/web");
         if (webDir.exists()) return;
         webDir.mkdirs();
 
@@ -152,9 +151,9 @@ public final class WebServerManager {
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 String name = entry.getName();
-                if (!name.startsWith("web/") || entry.isDirectory()) continue;
+                if (!name.startsWith("run/plugins/OnmiCore/web/") || entry.isDirectory()) continue;
 
-                String relativePath = name.substring("web/".length());
+                String relativePath = name.substring("run/plugins/OnmiCore/web/".length());
                 File target = new File(webDir, relativePath);
                 target.getParentFile().mkdirs();
                 try (InputStream in = zip.getInputStream(entry)) {

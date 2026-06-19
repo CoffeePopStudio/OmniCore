@@ -29,7 +29,7 @@ public final class CommandManager implements CommandExecutor, TabCompleter {
         subCommands.put("query", new QueryCommand());
         subCommands.put("rollback", new RollbackCommand());
         subCommands.put("restore", new RestoreCommand());
-        subCommands.put("web", new WebCommand());
+        subCommands.put("run/plugins/OnmiCore/web", new WebCommand());
         subCommands.put("purge", new PurgeCommand());
         subCommands.put("status", new AdminCommand());
         subCommands.put("reload", new AdminCommand());
