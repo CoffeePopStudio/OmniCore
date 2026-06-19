@@ -29,7 +29,7 @@ public final class BlockListener implements Listener {
     public void onBlockPlace(BlockPlaceEvent event) {
         if (!configManager.isLoggingBlockPlace()) return;
 
-        String key = event.getPlayer().getUniqueId().toString() + ":"
+        String key = event.getPlayer().getUniqueId() + ":"
                 + event.getBlock().getX() + ":"
                 + event.getBlock().getY() + ":"
                 + event.getBlock().getZ();
@@ -66,7 +66,7 @@ public final class BlockListener implements Listener {
     public void onBlockBreak(BlockBreakEvent event) {
         if (!configManager.isLoggingBlockBreak()) return;
 
-        String key = event.getPlayer().getUniqueId().toString() + ":"
+        String key = event.getPlayer().getUniqueId() + ":"
                 + event.getBlock().getX() + ":"
                 + event.getBlock().getY() + ":"
                 + event.getBlock().getZ();
