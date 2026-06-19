@@ -9,6 +9,7 @@ import cn.oneachina.onmiCore.listener.ContainerListener;
 import cn.oneachina.onmiCore.listener.InventoryListener;
 import cn.oneachina.onmiCore.command.CommandManager;
 import cn.oneachina.onmiCore.service.PurgeService;
+import cn.oneachina.onmiCore.service.RollbackService;
 import cn.oneachina.onmiCore.web.WebServerManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -21,6 +22,7 @@ public final class OnmiCore extends JavaPlugin {
     private DatabaseManager databaseManager;
     private DatabaseTask databaseTask;
     private PurgeService purgeService;
+    private RollbackService rollbackService;
     private WebServerManager webServerManager;
 
     @Override
@@ -40,6 +42,8 @@ public final class OnmiCore extends JavaPlugin {
 
         databaseTask = new DatabaseTask(this);
         databaseTask.start();
+
+        rollbackService = new RollbackService();
 
         registerListeners();
         registerCommands();
@@ -107,6 +111,10 @@ public final class OnmiCore extends JavaPlugin {
 
     public PurgeService getPurgeService() {
         return purgeService;
+    }
+
+    public RollbackService getRollbackService() {
+        return rollbackService;
     }
 
     public WebServerManager getWebServerManager() {
