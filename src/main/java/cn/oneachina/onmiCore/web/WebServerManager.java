@@ -12,14 +12,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 public final class WebServerManager {
 
@@ -66,6 +66,29 @@ public final class WebServerManager {
 
         app.get("/api/rollback/preview", rollbackController::preview);
         app.post("/api/rollback/execute", rollbackController::execute);
+        app.get("/api/rollback/progress", rollbackController::progress);
+
+        app.get("/api/logs/plugin", ctx -> {
+            String token = ctx.queryParam("token");
+            if (token == null || authService.getUuidFromToken(token) == null) {
+                ctx.status(401).json(Map.of("error", "Unauthorized"));
+                return;
+            }
+            File logFile = new File(plugin.getDataFolder().getParentFile(), "latest.log");
+            if (!logFile.exists()) {
+                ctx.json(Map.of("content", ""));
+                return;
+            }
+            int lines = ctx.queryParam("lines") != null ? Integer.parseInt(ctx.queryParam("lines")) : 200;
+            try {
+                java.util.List<String> allLines = java.nio.file.Files.readAllLines(logFile.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+                int from = Math.max(0, allLines.size() - lines);
+                String content = String.join("\n", allLines.subList(from, allLines.size()));
+                ctx.json(Map.of("content", content, "total_lines", allLines.size(), "lines_requested", lines));
+            } catch (Exception e) {
+                ctx.status(500).json(Map.of("error", e.getMessage()));
+            }
+        });
 
         app.get("/api/stats/blocks", ctx -> {
             try (Connection conn = db.getConnection();
@@ -116,54 +139,46 @@ public final class WebServerManager {
         if (webDir.exists()) return;
         webDir.mkdirs();
 
-        String indexContent = extractFile("web/index.html", "");
-        if (indexContent == null) {
-            plugin.getSLF4JLogger().warn("Web panel index.html not found in JAR");
+        File jarFile = getPluginJarFile();
+        if (jarFile == null || !jarFile.exists()) {
+            plugin.getSLF4JLogger().warn("Cannot locate plugin JAR for web resource extraction");
             webDir = null;
             return;
         }
 
-        Pattern pattern = Pattern.compile("(?:href|src)=\"([^\"]+)\"");
-        Matcher matcher = pattern.matcher(indexContent);
-        boolean any = true;
-        while (matcher.find()) {
-            String assetPath = matcher.group(1);
-            if (assetPath.startsWith("./")) {
-                assetPath = "web" + assetPath.substring(1);
-            } else if (assetPath.startsWith("/")) {
-                assetPath = "web" + assetPath;
-            } else {
-                assetPath = "web/assets/" + assetPath;
-            }
-            String targetSubDir = assetPath.contains("/") ?
-                assetPath.substring(assetPath.lastIndexOf('/') + 1) : assetPath;
-            String targetPath = assetPath.substring("web/".length());
-            File target = new File(webDir, targetPath);
-            if (target.exists()) continue;
-            target.getParentFile().mkdirs();
-            try (InputStream in = plugin.getResource(assetPath)) {
-                if (in != null) {
-                    Files.copy(in, target.toPath());
+        int count = 0;
+        try (ZipFile zip = new ZipFile(jarFile)) {
+            var entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                String name = entry.getName();
+                if (!name.startsWith("web/") || entry.isDirectory()) continue;
+
+                String relativePath = name.substring("web/".length());
+                File target = new File(webDir, relativePath);
+                target.getParentFile().mkdirs();
+                try (InputStream in = zip.getInputStream(entry)) {
+                    Files.copy(in, target.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 }
-            } catch (IOException ignored) {}
+                count++;
+            }
+        } catch (IOException e) {
+            plugin.getSLF4JLogger().error("Failed to extract web files from JAR", e);
+            webDir = null;
+            return;
         }
 
-        if (any) {
-            plugin.getSLF4JLogger().info("Web panel static files extracted to {}", webDir.getAbsolutePath());
-        }
+        plugin.getSLF4JLogger().info("Extracted {} web panel files to {}", count, webDir.getAbsolutePath());
     }
 
-    private String extractFile(String resourcePath, String targetSubDir) {
-        try (InputStream in = plugin.getResource(resourcePath)) {
-            if (in == null) return null;
-            String fileName = resourcePath.substring(resourcePath.lastIndexOf('/') + 1);
-            File target = new File(webDir, targetSubDir + fileName);
-            target.getParentFile().mkdirs();
-            Files.copy(in, target.toPath());
-            return new String(Files.readAllBytes(target.toPath()), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            return null;
-        }
+    private File getPluginJarFile() {
+        try {
+            var codeSource = plugin.getClass().getProtectionDomain().getCodeSource();
+            if (codeSource != null) {
+                return new File(codeSource.getLocation().toURI());
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private Consumer<JavalinConfig> configConsumer() {

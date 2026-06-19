@@ -75,6 +75,22 @@ public final class RollbackController {
         }
     }
 
+    public void progress(Context ctx) {
+        if (!authenticate(ctx)) return;
+        String ticketStr = ctx.queryParam("ticket");
+        if (ticketStr == null) {
+            ctx.status(400).json(Map.of("error", "Missing ticket"));
+            return;
+        }
+        try {
+            UUID ticket = UUID.fromString(ticketStr);
+            int pct = rollbackService.getProgress(ticket);
+            ctx.json(Map.of("progress", pct));
+        } catch (Exception e) {
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
+
     private RollbackQuery parseQuery(Context ctx) {
         String timeStr = ctx.queryParam("time");
         Duration timeAmount = Duration.ofMinutes(5);
