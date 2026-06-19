@@ -84,6 +84,10 @@ export interface RollbackExecuteResponse {
   error?: string
 }
 
+export interface StatsResponse {
+  count: number
+}
+
 export const api = {
   health(): Promise<HealthResponse> {
     return request<HealthResponse>('/api/health')
@@ -152,6 +156,18 @@ export const api = {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData,
     })
+  },
+
+  statsBlocks(): Promise<StatsResponse> {
+    return request<StatsResponse>('/api/stats/blocks')
+  },
+
+  statsContainers(): Promise<StatsResponse> {
+    return request<StatsResponse>('/api/stats/containers')
+  },
+
+  statsInventory(): Promise<StatsResponse> {
+    return request<StatsResponse>('/api/stats/inventory')
   },
 }
 
