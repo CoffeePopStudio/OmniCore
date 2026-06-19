@@ -10,6 +10,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -17,6 +18,8 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class WebServerManager {
 
@@ -89,10 +92,6 @@ public final class WebServerManager {
             }
         });
 
-        app.get("/api/logs/plugin", ctx -> {
-            ctx.json(Map.of("logs", new ArrayList<>()));
-        });
-
         plugin.getSLF4JLogger().info("Web panel started on port {}", port);
     }
 
@@ -114,41 +113,56 @@ public final class WebServerManager {
 
     private void extractWebFiles() {
         webDir = new File(plugin.getDataFolder(), "web");
-        if (webDir.exists()) {
-            plugin.getSLF4JLogger().info("Web files already extracted at {}", webDir.getAbsolutePath());
-            return;
-        }
+        if (webDir.exists()) return;
         webDir.mkdirs();
 
-        boolean any = extractFromJar("web/index.html", "");
-        any |= extractFromJar("web/assets/index-CrqYaQ-y.css", "assets/");
-        any |= extractFromJar("web/assets/index-mfu__DhA.js", "assets/");
-        any |= extractFromJar("web/assets/client-Do9JGKD1.js", "assets/");
-        any |= extractFromJar("web/assets/DashboardView-CDUmnf8s.js", "assets/");
-        any |= extractFromJar("web/assets/QueryView-exKDc0BW.js", "assets/");
-        any |= extractFromJar("web/assets/LoginView-CdYVgAgs.js", "assets/");
-        any |= extractFromJar("web/assets/RegisterView-CPj-XTXY.js", "assets/");
-        any |= extractFromJar("web/assets/RollbackView-DHtN2IPK.js", "assets/");
-        any |= extractFromJar("web/assets/LayoutView-6iti3gtx.js", "assets/");
-
-        if (!any) {
-            plugin.getSLF4JLogger().warn("No web panel static files found in JAR resources");
+        String indexContent = extractFile("web/index.html", "");
+        if (indexContent == null) {
+            plugin.getSLF4JLogger().warn("Web panel index.html not found in JAR");
             webDir = null;
-        } else {
+            return;
+        }
+
+        Pattern pattern = Pattern.compile("(?:href|src)=\"([^\"]+)\"");
+        Matcher matcher = pattern.matcher(indexContent);
+        boolean any = true;
+        while (matcher.find()) {
+            String assetPath = matcher.group(1);
+            if (assetPath.startsWith("./")) {
+                assetPath = "web" + assetPath.substring(1);
+            } else if (assetPath.startsWith("/")) {
+                assetPath = "web" + assetPath;
+            } else {
+                assetPath = "web/assets/" + assetPath;
+            }
+            String targetSubDir = assetPath.contains("/") ?
+                assetPath.substring(assetPath.lastIndexOf('/') + 1) : assetPath;
+            String targetPath = assetPath.substring("web/".length());
+            File target = new File(webDir, targetPath);
+            if (target.exists()) continue;
+            target.getParentFile().mkdirs();
+            try (InputStream in = plugin.getResource(assetPath)) {
+                if (in != null) {
+                    Files.copy(in, target.toPath());
+                }
+            } catch (IOException ignored) {}
+        }
+
+        if (any) {
             plugin.getSLF4JLogger().info("Web panel static files extracted to {}", webDir.getAbsolutePath());
         }
     }
 
-    private boolean extractFromJar(String resourcePath, String targetSubDir) {
+    private String extractFile(String resourcePath, String targetSubDir) {
         try (InputStream in = plugin.getResource(resourcePath)) {
-            if (in == null) return false;
+            if (in == null) return null;
             String fileName = resourcePath.substring(resourcePath.lastIndexOf('/') + 1);
             File target = new File(webDir, targetSubDir + fileName);
             target.getParentFile().mkdirs();
             Files.copy(in, target.toPath());
-            return true;
+            return new String(Files.readAllBytes(target.toPath()), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            return false;
+            return null;
         }
     }
 
