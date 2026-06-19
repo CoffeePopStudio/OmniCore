@@ -84,6 +84,16 @@ export interface RollbackExecuteResponse {
   error?: string
 }
 
+export interface RollbackProgressResponse {
+  progress: number
+}
+
+export interface LogsResponse {
+  content: string
+  total_lines: number
+  lines_requested: number
+}
+
 export interface StatsResponse {
   count: number
 }
@@ -156,6 +166,15 @@ export const api = {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData,
     })
+  },
+
+  rollbackProgress(ticket: string): Promise<RollbackProgressResponse> {
+    return request<RollbackProgressResponse>(`/api/rollback/progress?ticket=${encodeURIComponent(ticket)}`)
+  },
+
+  logsPlugin(lines?: number): Promise<LogsResponse> {
+    const qs = lines ? `?lines=${lines}` : ''
+    return request<LogsResponse>(`/api/logs/plugin${qs}`)
   },
 
   statsBlocks(): Promise<StatsResponse> {

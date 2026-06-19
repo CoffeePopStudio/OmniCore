@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, h, onMounted } from 'vue'
+import { ref, reactive, computed, h, onMounted, watch } from 'vue'
 import { api, type QueryResponse } from '@/api/client'
 import { NTag, useMessage } from 'naive-ui'
 
@@ -117,6 +117,10 @@ const columns = computed(() => {
 })
 
 onMounted(() => {
+  doQuery()
+})
+
+watch(queryType, () => {
   doQuery()
 })
 
