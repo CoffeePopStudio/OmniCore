@@ -27,7 +27,7 @@ public final class RollbackController {
         this.db = db;
         this.authService = authService;
         this.config = config;
-        this.rollbackService = new RollbackService();
+        this.rollbackService = JavaPlugin.getPlugin(OnmiCore.class).getRollbackService();
     }
 
     private boolean authenticate(Context ctx) {
