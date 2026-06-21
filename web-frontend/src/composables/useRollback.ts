@@ -1,11 +1,11 @@
 import { ref, onUnmounted } from 'vue'
 import { api } from '@/api/client'
-import type { RollbackFilters } from '@/types'
+import type { RollbackFilters, RollbackPreviewResponse } from '@/types'
 
 export function useRollback() {
   const loading = ref(false)
   const executing = ref(false)
-  const previewData = ref<Record<string, string> | null>(null)
+  const previewData = ref<RollbackPreviewResponse | null>(null)
   const previewCount = ref(0)
   const previewText = ref('')
   const ticket = ref<string | null>(null)
@@ -33,24 +33,32 @@ export function useRollback() {
     loading.value = true
     previewData.value = null
     previewCount.value = 0
+    previewText.value = ''
+    ticket.value = null
     try {
       const params = buildParams(timeAmount, filters)
       const result = await api.rollbackPreview(params)
-      previewData.value = result.preview
-      previewCount.value = result.count
-      const lines = Object.entries(result.preview).map(([k, v]) => `${k}: ${v}`)
-      previewText.value = lines.join('\n')
+      previewData.value = result
+      previewCount.value = result.totalLocations
+      ticket.value = result.ticket
+      const lines = result.sampleTargets.map(s => `${s.locationKey}: ${s.action} (${s.targetType})`)
+      previewText.value = `Total affected locations: ${result.totalLocations}` +
+        (result.hasContainerOps ? '\nIncludes container operations' : '') +
+        (result.hasInventoryOps ? '\nIncludes inventory operations' : '') +
+        '\n\nSample targets:\n' + lines.join('\n')
       return null
     } catch (e: any) {
       return e.message || 'Preview failed'
+    } finally {
+      loading.value = false
     }
   }
 
-  async function handleExecute(timeAmount: string, filters: RollbackFilters): Promise<string | null> {
+  async function handleExecute(): Promise<string | null> {
+    if (!ticket.value) return 'No preview ticket available'
     executing.value = true
     try {
-      const params = buildParams(timeAmount, filters)
-      const result = await api.rollbackExecute(params)
+      const result = await api.rollbackExecute({ ticket: ticket.value })
       ticket.value = result.ticket || ''
       progress.value = 0
       previewData.value = null

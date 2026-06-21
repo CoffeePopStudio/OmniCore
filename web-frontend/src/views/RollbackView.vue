@@ -30,7 +30,11 @@
     <div v-if="hasPreview" class="glass-card preview-card">
       <div class="preview-header">
         <span class="text-title-2">Rollback Preview</span>
-        <span class="preview-badge">{{ previewCount }} affected locations</span>
+        <div class="preview-badges">
+          <span class="preview-badge">{{ previewCount }} locations</span>
+          <span v-if="hasContainerOps" class="preview-badge ops-badge">Container Ops</span>
+          <span v-if="hasInventoryOps" class="preview-badge ops-badge">Inventory Ops</span>
+        </div>
       </div>
       <n-input type="textarea" :value="previewText" autosize :minrows="5" :maxrows="15" readonly />
       <div class="preview-actions">
@@ -76,6 +80,8 @@ const previewCount = rollback.previewCount
 const previewText = rollback.previewText
 const hasTicket = computed(() => rollback.ticket.value !== null)
 const progress = rollback.progress
+const hasContainerOps = computed(() => rollback.previewData.value?.hasContainerOps ?? false)
+const hasInventoryOps = computed(() => rollback.previewData.value?.hasInventoryOps ?? false)
 
 const isPreviewDisabled = computed(() => loading.value || hasPreview.value)
 
@@ -114,7 +120,7 @@ async function handlePreviewClick() {
 }
 
 async function handleExecuteClick() {
-  const error = await rollback.handleExecute(timeAmount.value, filters)
+  const error = await rollback.handleExecute()
   if (error) message.error(error)
   else message.success('Rollback started')
 }
@@ -203,6 +209,16 @@ function resetFilters() {
   background: var(--lg-accent);
   color: #fff;
   letter-spacing: -0.01em;
+}
+
+.preview-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ops-badge {
+  background: var(--lg-accent-amber, #d97706);
 }
 
 .preview-actions {

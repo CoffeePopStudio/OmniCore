@@ -1,8 +1,12 @@
 package cn.oneachina.onmiCore.command;
 
 import cn.oneachina.onmiCore.OnmiCore;
+import cn.oneachina.onmiCore.model.rollback.PreviewEntry;
+import cn.oneachina.onmiCore.model.rollback.RollbackPlan;
+import cn.oneachina.onmiCore.model.rollback.RollbackQuery;
 import cn.oneachina.onmiCore.service.RollbackService;
 import cn.oneachina.onmiCore.util.PermissionUtil;
+import cn.oneachina.onmiCore.util.StringUtil;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
@@ -13,12 +17,8 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class RollbackCommand implements SubCommand {
-
-    private static final Pattern TIME_PATTERN = Pattern.compile("^(\\d+)([mhd])$");
 
     private final OnmiCore plugin;
     private final RollbackService rollbackService;
@@ -52,7 +52,7 @@ public class RollbackCommand implements SubCommand {
             return;
         }
 
-        Duration timeAmount = parseTime(args[0]);
+        Duration timeAmount = StringUtil.parseTime(args[0]);
         if (timeAmount == null) {
             sender.sendMessage(plugin.getMessageManager().get("prefix").append(
                     Component.text("<red>Invalid time format. Use e.g. 30m, 1h, 7d</red>")));
@@ -96,56 +96,43 @@ public class RollbackCommand implements SubCommand {
             }
         }
 
-        RollbackService.RollbackQuery query = new RollbackService.RollbackQuery(
+        RollbackQuery query = new RollbackQuery(
                 timeAmount, playerName, worldName, radius, center, blockType);
 
-        Duration finalTimeAmount = timeAmount;
-        String finalPlayerName = playerName;
-        String finalWorldName = worldName;
-        String finalBlockType = blockType;
-        int finalRadius = radius;
-
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            Map<String, String> preview = rollbackService.createPreview(query);
+            RollbackPlan plan = rollbackService.buildRollbackPlanWithTimeout(query, 30000);
 
             plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (preview.isEmpty()) {
+                if (plan == null) {
+                    sender.sendMessage("§cRollback query timed out or failed. Try narrowing the search range.");
+                    return;
+                }
+
+                if (plan.isEmpty()) {
                     sender.sendMessage(plugin.getMessageManager().get("query-no-results"));
                     return;
                 }
 
                 sender.sendMessage(plugin.getMessageManager().get("rollback-preview"));
                 sender.sendMessage(plugin.getMessageManager().get("rollback-time-range",
-                        "now - " + formatDuration(finalTimeAmount), "now"));
-                sender.sendMessage(plugin.getMessageManager().get("rollback-affected-locations", preview.size()));
+                        "now - " + formatDuration(timeAmount), "now"));
+                sender.sendMessage(plugin.getMessageManager().get("rollback-affected-locations", plan.totalLocations));
 
-                long placeCount = 0;
-                long breakCount = 0;
-                long containerCount = preview.containsKey("[container]") ? 1 : 0;
-                for (Map.Entry<String, String> entry : preview.entrySet()) {
-                    if (entry.getValue().startsWith("restore")) {
-                        placeCount++;
-                    } else if (entry.getValue().startsWith("remove")) {
-                        breakCount++;
-                    }
+                for (PreviewEntry entry : plan.sampleTargets) {
+                    sender.sendMessage("  " + entry.locationKey + " → " + entry.targetType);
                 }
-                sender.sendMessage(plugin.getMessageManager().get("rollback-stats",
-                        placeCount, breakCount, containerCount));
 
-                if (finalPlayerName != null) {
-                    sender.sendMessage(plugin.getMessageManager().get("rollback-players", finalPlayerName));
+                if (plan.hasContainerOps) {
+                    sender.sendMessage("  [container operations to reverse]");
                 }
 
                 sender.sendMessage(plugin.getMessageManager().get("rollback-confirm"));
                 sender.sendMessage(plugin.getMessageManager().get("rollback-cancel"));
 
-                UUID senderId;
-                if (sender instanceof Player player) {
-                    senderId = player.getUniqueId();
-                    UUID ticket = rollbackService.prepareRollback(query, sender);
-                    if (ticket != null) {
-                        pendingConfirmations.put(senderId, ticket);
-                    }
+                UUID senderId = ((Player) sender).getUniqueId();
+                UUID ticket = rollbackService.prepareRollback(plan, sender);
+                if (ticket != null) {
+                    pendingConfirmations.put(senderId, ticket);
                 }
             });
         });
@@ -181,21 +168,6 @@ public class RollbackCommand implements SubCommand {
 
         rollbackService.cancelRollback(ticket);
         sender.sendMessage(plugin.getMessageManager().get("rollback-cancelled"));
-    }
-
-    private Duration parseTime(String input) {
-        Matcher matcher = TIME_PATTERN.matcher(input);
-        if (!matcher.matches()) {
-            return null;
-        }
-        int amount = Integer.parseInt(matcher.group(1));
-        String unit = matcher.group(2);
-        return switch (unit) {
-            case "m" -> Duration.ofMinutes(amount);
-            case "h" -> Duration.ofHours(amount);
-            case "d" -> Duration.ofDays(amount);
-            default -> null;
-        };
     }
 
     private int parseInt(String s) {
