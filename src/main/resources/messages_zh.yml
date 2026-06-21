@@ -21,6 +21,12 @@ query-page: "<gray>--- 第 {0}/{1} 页 ---</gray>"
 # 检查模式
 inspect-enabled: "<green>检查模式已开启。点击方块查看历史记录</green>"
 inspect-disabled: "<red>检查模式已关闭</red>"
+inspect-action-place: "<green>放置了</green>"
+inspect-action-break: "<red>破坏了</red>"
+inspect-action-container: "<yellow>操作了容器</yellow>"
+inspect-action-inventory: "<light_purple>操作了物品</light_purple>"
+inspect-action-default: "<gray>操作了</gray>"
+inspect-entry: "<gray>#{0}</gray> <dark_gray>[</dark_gray><white>{1}</white><dark_gray>]</dark_gray> <aqua>{2}</aqua> <red>{3}</red> <yellow>{4}</yellow> <dark_gray>@</dark_gray> <green>{5}</green>"
 
 # 回滚
 rollback-preview: "<gold>=== 回滚预览 ===</gold>"

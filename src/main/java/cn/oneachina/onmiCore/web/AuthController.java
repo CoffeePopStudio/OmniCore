@@ -38,6 +38,14 @@ public final class AuthController {
                 ctx.status(400).json(Map.of("error", "Missing fields"));
                 return;
             }
+            if (password.length() < 6) {
+                ctx.status(400).json(Map.of("error", "Password must be at least 6 characters"));
+                return;
+            }
+            if (username.length() < 2 || username.length() > 24) {
+                ctx.status(400).json(Map.of("error", "Username must be 2-24 characters"));
+                return;
+            }
             if (Bukkit.getPlayer(UUID.fromString(uuid)) == null && Bukkit.getOfflinePlayer(UUID.fromString(uuid)).getName() == null) {
                 ctx.status(400).json(Map.of("error", "Player not found"));
                 return;
@@ -115,6 +123,14 @@ public final class AuthController {
         String password = ctx.formParam("password");
         if (bindToken == null || username == null || password == null) {
             ctx.status(400).json(Map.of("error", "Missing fields"));
+            return;
+        }
+        if (password.length() < 6) {
+            ctx.status(400).json(Map.of("error", "Password must be at least 6 characters"));
+            return;
+        }
+        if (username.length() < 2 || username.length() > 24) {
+            ctx.status(400).json(Map.of("error", "Username must be 2-24 characters"));
             return;
         }
         String uuid = bindTokens.remove(bindToken);

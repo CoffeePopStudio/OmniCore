@@ -17,16 +17,17 @@ import java.util.Date;
 
 public final class AuthService {
 
-    private static final long TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000L;
     private static final String ENV_SECRET_KEY = "ONMICORE_JWT_SECRET";
 
     private final SecretKey jwtKey;
+    private final long tokenExpiryMs;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    public AuthService() {
+    public AuthService(long tokenExpiryDays) {
         JavaPlugin plugin = JavaPlugin.getPlugin(cn.oneachina.onmiCore.OnmiCore.class);
         byte[] keyBytes = loadOrGenerateSecret(plugin);
         this.jwtKey = Keys.hmacShaKeyFor(keyBytes);
+        this.tokenExpiryMs = tokenExpiryDays * 24 * 60 * 60 * 1000L;
     }
 
     private static byte[] loadOrGenerateSecret(JavaPlugin plugin) {
@@ -81,7 +82,7 @@ public final class AuthService {
                 .subject(uuid)
                 .claim("username", username)
                 .issuedAt(now)
-                .expiration(new Date(now.getTime() + TOKEN_EXPIRY_MS))
+                .expiration(new Date(now.getTime() + tokenExpiryMs))
                 .signWith(jwtKey)
                 .compact();
     }

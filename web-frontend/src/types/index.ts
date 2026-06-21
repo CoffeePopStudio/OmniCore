@@ -69,9 +69,18 @@ export interface QueryResponse {
   page_size: number
 }
 
+export interface RollbackSampleTarget {
+  locationKey: string
+  targetType: string
+  action: string
+}
+
 export interface RollbackPreviewResponse {
-  preview: Record<string, string>
-  count: number
+  ticket: string
+  totalLocations: number
+  hasContainerOps: boolean
+  hasInventoryOps: boolean
+  sampleTargets: RollbackSampleTarget[]
 }
 
 export interface RollbackExecuteResponse {

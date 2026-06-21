@@ -21,6 +21,12 @@ query-page: "<gray>--- Page {0}/{1} ---</gray>"
 # Inspect Mode
 inspect-enabled: "<green>Inspect mode enabled. Click a block to view history</green>"
 inspect-disabled: "<red>Inspect mode disabled</red>"
+inspect-action-place: "<green>placed</green>"
+inspect-action-break: "<red>broke</red>"
+inspect-action-container: "<yellow>modified container</yellow>"
+inspect-action-inventory: "<light_purple>inventory change</light_purple>"
+inspect-action-default: "<gray>acted on</gray>"
+inspect-entry: "<gray>#{0}</gray> <dark_gray>[</dark_gray><white>{1}</white><dark_gray>]</dark_gray> <aqua>{2}</aqua> <red>{3}</red> <yellow>{4}</yellow> <dark_gray>@</dark_gray> <green>{5}</green>"
 
 # Rollback
 rollback-preview: "<gold>=== Rollback Preview ===</gold>"

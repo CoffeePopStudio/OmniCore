@@ -17,13 +17,10 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class QueryCommand implements SubCommand {
 
     private static final DateTimeFormatter MYSQL_TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.of("UTC"));
-    private static final Pattern TIME_PATTERN = Pattern.compile("^(\\d+)([mhd])$");
     private static final int PAGE_SIZE = 10;
 
     private final OnmiCore plugin;
@@ -39,7 +36,7 @@ public class QueryCommand implements SubCommand {
             return;
         }
 
-        Duration timeAmount = parseTime(args[0]);
+        Duration timeAmount = StringUtil.parseTime(args[0]);
         if (timeAmount == null) {
             sender.sendMessage(plugin.getMessageManager().get("prefix").append(
                     Component.text("<red>Invalid time format. Use e.g. 30m, 1h, 7d</red>")));
@@ -140,21 +137,6 @@ public class QueryCommand implements SubCommand {
                     .append(Component.text("]")));
         }
         return nav;
-    }
-
-    private Duration parseTime(String input) {
-        Matcher matcher = TIME_PATTERN.matcher(input);
-        if (!matcher.matches()) {
-            return null;
-        }
-        int amount = Integer.parseInt(matcher.group(1));
-        String unit = matcher.group(2);
-        return switch (unit) {
-            case "m" -> Duration.ofMinutes(amount);
-            case "h" -> Duration.ofHours(amount);
-            case "d" -> Duration.ofDays(amount);
-            default -> null;
-        };
     }
 
     private String formatTimestamp(Instant instant) {

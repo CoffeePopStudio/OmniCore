@@ -30,7 +30,26 @@ public class RecordService {
                                           String playerName, String action,
                                           String blockType, Duration timeAgo,
                                           int page, int pageSize) {
-        SqlBuilder sql = buildBlockQuery(world, x, y, z, playerName, action, blockType, timeAgo, false);
+        SqlBuilder sql = buildBlockQuery(world, x, y, z, playerName, action, blockType, timeAgo, null, null, false);
+        sql.orderBy("timestamp DESC").limit(pageSize).offset(page * pageSize);
+
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            return DatabaseUtil.query(conn, sql.build(), sql.getParams(), BlockRecord.MAPPER);
+        } catch (Exception e) {
+            plugin.getSLF4JLogger().error("Failed to query block records", e);
+            return Collections.emptyList();
+        }
+    }
+
+    public List<BlockRecord> queryBlocksWithTimeRange(String world, String playerName,
+                                                       String action, String blockType,
+                                                       String timeFrom, String timeTo,
+                                                       boolean fuzzyPlayer,
+                                                       int page, int pageSize) {
+        SqlBuilder sql = buildBlockQuery(world, 0, 0, 0, playerName, action, blockType, null, timeFrom, timeTo, false);
+        if (fuzzyPlayer && playerName != null && !playerName.isEmpty()) {
+            sql.where("(player_name LIKE ? OR player_uuid = ?)", "%" + playerName + "%", playerName);
+        }
         sql.orderBy("timestamp DESC").limit(pageSize).offset(page * pageSize);
 
         try (Connection conn = plugin.getDatabaseManager().getConnection()) {
@@ -44,7 +63,7 @@ public class RecordService {
     public int countBlocks(String world, int x, int y, int z,
                             String playerName, String action,
                             String blockType, Duration timeAgo) {
-        SqlBuilder sql = buildBlockQuery(world, x, y, z, playerName, action, blockType, timeAgo, true);
+        SqlBuilder sql = buildBlockQuery(world, x, y, z, playerName, action, blockType, timeAgo, null, null, true);
 
         try (Connection conn = plugin.getDatabaseManager().getConnection()) {
             return DatabaseUtil.count(conn, sql.build(), sql.getParams());
@@ -57,6 +76,7 @@ public class RecordService {
     private SqlBuilder buildBlockQuery(String world, int x, int y, int z,
                                         String playerName, String action,
                                         String blockType, Duration timeAgo,
+                                        String timeFrom, String timeTo,
                                         boolean count) {
         SqlBuilder sql = count ? SqlBuilder.count("block_records") : SqlBuilder.select("*", "block_records");
         if (world != null && !world.isEmpty()) {
@@ -76,6 +96,12 @@ public class RecordService {
         }
         if (timeAgo != null) {
             sql.and("timestamp >= ?", formatTimestamp(Instant.now().minus(timeAgo)));
+        }
+        if (timeFrom != null && !timeFrom.isEmpty()) {
+            sql.and("timestamp >= ?", timeFrom);
+        }
+        if (timeTo != null && !timeTo.isEmpty()) {
+            sql.and("timestamp <= ?", timeTo);
         }
         return sql;
     }

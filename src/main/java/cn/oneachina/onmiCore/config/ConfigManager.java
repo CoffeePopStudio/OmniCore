@@ -68,6 +68,7 @@ public final class ConfigManager {
         public final boolean webPanelEnabled;
         public final int webPanelPort;
         public final boolean webRequireSsl;
+        public final int tokenExpiryDays;
         public final java.util.List<String> allowedIps;
 
         public final boolean loggingBlockPlace;
@@ -83,6 +84,7 @@ public final class ConfigManager {
         public final int blocksPerTick;
         public final boolean requireConfirmation;
         public final int checkpointInterval;
+        public final int maxConcurrentRollbacks;
 
         public final String retentionMode;
         public final int retentionMaxDays;
@@ -104,6 +106,7 @@ public final class ConfigManager {
             this.webPanelEnabled = web.getBoolean("enabled", true);
             this.webPanelPort = web.getInt("port", 9812);
             this.webRequireSsl = web.getBoolean("require-ssl", false);
+            this.tokenExpiryDays = web.getInt("token-expiry-days", 7);
             this.allowedIps = web.getStringList("allowed-ips");
 
             ConfigurationSection log = config.getConfigurationSection("logging");
@@ -121,6 +124,7 @@ public final class ConfigManager {
             this.blocksPerTick = rb.getInt("blocks-per-tick", 80);
             this.requireConfirmation = rb.getBoolean("require-confirmation", true);
             this.checkpointInterval = rb.getInt("checkpoint-interval", 100);
+            this.maxConcurrentRollbacks = rb.getInt("max-concurrent", 3);
 
             ConfigurationSection ret = config.getConfigurationSection("retention");
             this.retentionMode = ret.getString("mode", "age");

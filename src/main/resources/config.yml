@@ -27,6 +27,8 @@ web-panel:
   enabled: true
   port: 9812
   require-ssl: false
+  # JWT Token 过期天数
+  token-expiry-days: 7
   # IP 白名单（空 = 允许所有 IP）
   allowed-ips: []
 
@@ -48,6 +50,8 @@ rollback:
   blocks-per-tick: 80
   require-confirmation: true
   checkpoint-interval: 100
+  # 最大并发回滚任务数
+  max-concurrent: 3
 
 # 数据保留
 retention:

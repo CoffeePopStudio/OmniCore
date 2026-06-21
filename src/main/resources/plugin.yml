@@ -11,3 +11,23 @@ commands:
     description: OnmiCore main command
     usage: /oc <subcommand>
     permission: onmicore.use
+
+permissions:
+  onmicore.use:
+    description: Allow using OnmiCore commands
+    default: op
+  onmicore.admin:
+    description: Allow administrative commands (status, reload, migrate)
+    default: op
+  onmicore.rollback:
+    description: Allow rollback and restore operations
+    default: op
+  onmicore.web.view:
+    description: Allow viewing the web panel
+    default: op
+  onmicore.web.rollback:
+    description: Allow executing rollback from the web panel
+    default: op
+  onmicore.web.admin:
+    description: Allow admin-level actions in the web panel
+    default: op

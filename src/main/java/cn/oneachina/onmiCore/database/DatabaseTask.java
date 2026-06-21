@@ -17,10 +17,11 @@ public final class DatabaseTask {
 
     private static final int BATCH_SIZE = 50;
     private static final int FLUSH_INTERVAL_MS = 1000;
+    private static final int MAX_QUEUE_SIZE = 10000;
 
     private final JavaPlugin plugin;
     private final DatabaseManager db;
-    private final BlockingQueue<Runnable> queue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<Runnable> queue = new LinkedBlockingQueue<>(MAX_QUEUE_SIZE);
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Thread worker;
 
@@ -51,7 +52,9 @@ public final class DatabaseTask {
     }
 
     public void submit(Runnable task) {
-        queue.offer(task);
+        if (!queue.offer(task)) {
+            plugin.getSLF4JLogger().warn("Database queue is full ({}), dropping write task", MAX_QUEUE_SIZE);
+        }
     }
 
     private void processQueue() {

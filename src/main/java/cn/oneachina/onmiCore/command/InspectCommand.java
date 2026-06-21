@@ -80,38 +80,33 @@ public class InspectCommand implements SubCommand, Listener {
                 int index = 1;
                 for (BlockRecord record : records) {
                     String blockType;
-                    String actionVerb;
+                    String actionKey;
                     switch (record.action) {
                         case "break" -> {
                             blockType = record.oldBlockType != null ? record.oldBlockType : "unknown";
-                            actionVerb = "破坏了";
+                            actionKey = "inspect-action-break";
                         }
                         case "place" -> {
                             blockType = record.newBlockType != null ? record.newBlockType : "unknown";
-                            actionVerb = "放置了";
+                            actionKey = "inspect-action-place";
                         }
                         case "container" -> {
                             blockType = record.newBlockType != null ? record.newBlockType : "container";
-                            actionVerb = "操作了容器";
+                            actionKey = "inspect-action-container";
                         }
                         case "inventory" -> {
                             blockType = "inventory";
-                            actionVerb = "操作了物品";
+                            actionKey = "inspect-action-inventory";
                         }
                         default -> {
                             blockType = record.newBlockType != null ? record.newBlockType : (record.oldBlockType != null ? record.oldBlockType : "unknown");
-                            actionVerb = "操作了";
+                            actionKey = "inspect-action-default";
                         }
                     }
                     String locStr = record.world + " " + record.x + "," + record.y + "," + record.z;
-                    Component msg = miniMessage.deserialize(
-                            "<gray>#" + index + "</gray> <dark_gray>[</dark_gray><white>" + record.timestamp + "</white><dark_gray>]</dark_gray> " +
-                            "<aqua>" + record.playerName + "</aqua> " +
-                            "<red>" + actionVerb + "</red> " +
-                            "<yellow>" + blockType + "</yellow> " +
-                            "<dark_gray>@</dark_gray> <green>" + locStr + "</green>"
-                    );
-                    player.sendMessage(msg);
+                    String actionVerb = plugin.getMessageManager().raw(actionKey);
+                    player.sendMessage(plugin.getMessageManager().get("inspect-entry",
+                            index, record.timestamp, record.playerName, actionVerb, blockType, locStr));
                     index++;
                 }
             });

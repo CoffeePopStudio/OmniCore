@@ -23,6 +23,13 @@ public final class BlockListener implements Listener {
     public BlockListener() {
         this.plugin = JavaPlugin.getPlugin(OnmiCore.class);
         this.configManager = plugin.getConfigManager();
+
+        long cleanupInterval = Math.max(configManager.getDedupTimeMs() * 2, 30_000L);
+        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> {
+            long now = System.currentTimeMillis();
+            long threshold = configManager.getDedupTimeMs();
+            lastActionMap.entrySet().removeIf(entry -> (now - entry.getValue()) > threshold);
+        }, cleanupInterval, cleanupInterval);
     }
 
     @EventHandler
@@ -76,7 +83,7 @@ public final class BlockListener implements Listener {
         lastActionMap.put(key, now);
 
         BlockState oldState = event.getBlock().getState();
-        String oldBlockType = oldState.getType().getKey().getKey();
+        String oldBlockType = oldState.getType().getKey().toString();
 
         byte[] oldBlockData = oldState.getBlockData().getAsString().getBytes(StandardCharsets.UTF_8);
 
