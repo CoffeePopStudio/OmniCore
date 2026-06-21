@@ -2,6 +2,10 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite'
 import { fileURLToPath, URL } from 'node:url'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig({
   base: './',
@@ -24,6 +28,19 @@ export default defineConfig({
         /\.git/,
       ],
     }),
+    {
+      name: 'web-version',
+      closeBundle() {
+        const pkgPath = resolve(__dirname, 'package.json')
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+        const version = {
+          version: pkg.version,
+          buildTime: new Date().toISOString(),
+        }
+        const outPath = resolve(__dirname, '../src/main/resources/web/web-version.json')
+        writeFileSync(outPath, JSON.stringify(version, null, 2))
+      },
+    },
   ],
   resolve: {
     alias: {

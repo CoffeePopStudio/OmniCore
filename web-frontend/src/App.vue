@@ -26,7 +26,25 @@ theme.init()
 onMounted(async () => {
   const auth = useAuthStore()
   await auth.checkAutoLogin()
+  checkFrontendVersion()
 })
+
+async function checkFrontendVersion() {
+  try {
+    const res = await fetch('/api/web-version')
+    const data = await res.json()
+    const cached = localStorage.getItem('web_version_cache')
+    if (cached && cached !== data.version) {
+      console.warn(
+        `Web panel updated: ${cached} → ${data.version}. ` +
+        `Clear browser cache (Ctrl+F5 / Cmd+Shift+R) if you see layout issues.`
+      )
+    }
+    localStorage.setItem('web_version_cache', data.version)
+  } catch (e) {
+    // API not available (offline/dev mode) — silent
+  }
+}
 
 const darkOverrides: GlobalThemeOverrides = {
   common: {

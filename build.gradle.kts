@@ -44,6 +44,14 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
 
+val npmRunBuild by tasks.registering(Exec::class) {
+    workingDir = file("web-frontend")
+    val isWindows = System.getProperty("os.name").lowercase().contains("win")
+    commandLine(if (isWindows) listOf("npm.cmd", "run", "build") else listOf("npm", "run", "build"))
+}
+
+val skipFrontend = project.hasProperty("skipFrontend")
+
 tasks {
     shadowJar {
         relocate("com.zaxxer.hikari", "cn.oneachina.onmicore.libs.hikari")
@@ -63,6 +71,9 @@ tasks {
     }
 
     processResources {
+        if (!skipFrontend) {
+            dependsOn(npmRunBuild)
+        }
         val props = mapOf("version" to version)
         filesMatching("plugin.yml") {
             expand(props)

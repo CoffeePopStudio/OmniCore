@@ -11,15 +11,16 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 public final class WebServerManager {
 
@@ -29,26 +30,23 @@ public final class WebServerManager {
     private final AuthService authService;
     private AuthController authController;
     private Javalin app;
-    private File webDir;
 
     public WebServerManager(JavaPlugin plugin, ConfigManager config, DatabaseManager db) {
         this.plugin = plugin;
         this.config = config;
         this.db = db;
-        this.authService = new AuthService();
+        this.authService = new AuthService(config.getData().tokenExpiryDays);
     }
 
     public void start() {
         int port = config.getWebPanelPort();
-
-        extractWebFiles();
 
         app = Javalin.create(configConsumer()).start(port);
 
         addAuthMiddleware();
 
         this.authController = new AuthController(db, authService);
-        QueryController queryController = new QueryController(db, config);
+        QueryController queryController = new QueryController(db, config, ((cn.oneachina.onmiCore.OnmiCore) plugin).getRecordService());
         RollbackController rollbackController = new RollbackController(db, config);
 
         app.get("/api/health", ctx -> ctx.json(new Object() {
@@ -82,9 +80,24 @@ public final class WebServerManager {
                 java.util.List<String> allLines = java.nio.file.Files.readAllLines(logFile.toPath(), java.nio.charset.StandardCharsets.UTF_8);
                 int from = Math.max(0, allLines.size() - lines);
                 String content = String.join("\n", allLines.subList(from, allLines.size()));
+                content = content.replaceAll("\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b", "<filtered>");
+                content = content.replaceAll("\\b[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\\b", "<filtered>");
                 ctx.json(Map.of("content", content, "total_lines", allLines.size(), "lines_requested", lines));
             } catch (Exception e) {
                 ctx.status(500).json(Map.of("error", e.getMessage()));
+            }
+        });
+
+        app.get("/api/web-version", ctx -> {
+            try (InputStream is = getClass().getClassLoader().getResourceAsStream("web/web-version.json")) {
+                if (is == null) {
+                    ctx.json(Map.of("version", "unknown", "pluginVersion", plugin.getPluginMeta().getVersion()));
+                    return;
+                }
+                String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                JsonObject node = JsonParser.parseString(json).getAsJsonObject();
+                node.addProperty("pluginVersion", plugin.getPluginMeta().getVersion());
+                ctx.json(node);
             }
         });
 
@@ -124,59 +137,10 @@ public final class WebServerManager {
         return authController.createBindToken(uuid);
     }
 
-    private void extractWebFiles() {
-        webDir = new File(plugin.getDataFolder(), "run/plugins/OnmiCore/web");
-        if (webDir.exists()) return;
-        webDir.mkdirs();
-
-        File jarFile = getPluginJarFile();
-        if (jarFile == null || !jarFile.exists()) {
-            plugin.getSLF4JLogger().warn("Cannot locate plugin JAR for web resource extraction");
-            webDir = null;
-            return;
-        }
-
-        int count = 0;
-        try (ZipFile zip = new ZipFile(jarFile)) {
-            var entries = zip.entries();
-            while (entries.hasMoreElements()) {
-                ZipEntry entry = entries.nextElement();
-                String name = entry.getName();
-                if (!name.startsWith("run/plugins/OnmiCore/web/") || entry.isDirectory()) continue;
-
-                String relativePath = name.substring("run/plugins/OnmiCore/web/".length());
-                File target = new File(webDir, relativePath);
-                target.getParentFile().mkdirs();
-                try (InputStream in = zip.getInputStream(entry)) {
-                    Files.copy(in, target.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                }
-                count++;
-            }
-        } catch (IOException e) {
-            plugin.getSLF4JLogger().error("Failed to extract web files from JAR", e);
-            webDir = null;
-            return;
-        }
-
-        plugin.getSLF4JLogger().info("Extracted {} web panel files to {}", count, webDir.getAbsolutePath());
-    }
-
-    private File getPluginJarFile() {
-        try {
-            var codeSource = plugin.getClass().getProtectionDomain().getCodeSource();
-            if (codeSource != null) {
-                return new File(codeSource.getLocation().toURI());
-            }
-        } catch (Exception ignored) {}
-        return null;
-    }
-
     private Consumer<JavalinConfig> configConsumer() {
         return cfg -> {
             cfg.showJavalinBanner = false;
-            if (webDir != null) {
-                cfg.staticFiles.add(webDir.getAbsolutePath(), Location.EXTERNAL);
-            }
+            cfg.staticFiles.add("/web", Location.CLASSPATH);
             cfg.bundledPlugins.enableCors(cors -> cors.addRule(corsRule -> {
                 corsRule.anyHost();
             }));
@@ -184,10 +148,29 @@ public final class WebServerManager {
     }
 
     private void addAuthMiddleware() {
+        List<String> allowedIps = config.getAllowedIps();
+
         app.before("/api/*", ctx -> {
+            ctx.res().setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self' data:; frame-ancestors 'none'; form-action 'self'");
+
             String path = ctx.path();
             if (path.equals("/api/health") || path.startsWith("/api/auth/")) {
                 return;
+            }
+
+            if (!allowedIps.isEmpty()) {
+                String remoteIp = ctx.req().getRemoteAddr();
+                boolean allowed = allowedIps.stream().anyMatch(ip -> {
+                    if (ip.contains("*")) {
+                        String pattern = ip.replace(".", "\\.").replace("*", ".*");
+                        return remoteIp.matches(pattern);
+                    }
+                    return ip.equals(remoteIp);
+                });
+                if (!allowed) {
+                    ctx.status(403).json(Map.of("error", "Access denied: IP not allowed"));
+                    return;
+                }
             }
 
             String authHeader = ctx.header("Authorization");
